@@ -560,6 +560,9 @@ public sealed partial class MainWindow : Window
                 else ShowLogin();
                 break;
             case "sync_started": ShowInfo("Syncing", "Checking iCloud for changes…", InfoBarSeverity.Informational); break;
+            case "sync_progress":
+                ShowInfo("Syncing", e.Data.Text("message", $"Processing {e.Data.Text("stage", "reminders")}..."), InfoBarSeverity.Informational);
+                break;
             case "sync_finished": AppInfoBar.IsOpen = false; await RefreshAllAsync(); break;
             case "sync_error": ShowInfo("Sync failed", e.Data.Text("message", "Try again in a moment."), InfoBarSeverity.Error); break;
             case "conflict": await RefreshStatusAsync(); break;

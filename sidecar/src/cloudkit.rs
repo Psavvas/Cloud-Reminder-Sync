@@ -2,7 +2,7 @@
 //! Reminders. It deliberately exposes only query, lookup, modify and zone
 //! changes; arbitrary URLs and containers are not accepted from UI input.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -80,6 +80,7 @@ impl<'a> CloudKit<'a> {
         }
         let mut records = Vec::new();
         let mut continuation: Option<String> = None;
+        let mut pages = PageGuard::default();
         loop {
             let mut body = json!({
                 "query": {"recordType": record_type, "filterBy": filter_by.clone()},
@@ -106,8 +107,20 @@ impl<'a> CloudKit<'a> {
             if continuation.is_none() {
                 break;
             }
+            pages.advance(continuation.as_deref())?;
+            eprintln!("sync: query {record_type}, page={}, records={}", pages.seen.len(), records.len());
         }
         Ok(records)
+    }
+
+    pub async fn current_sync_token(&self) -> Result<Option<String>> {
+        let response = self.post("records/query", &json!({
+            "query":{"recordType":"reminderList"},
+            "zoneID":reminders_zone(), "resultsLimit":1
+        })).await?;
+        reject_embedded_errors(std::slice::from_ref(&response))?;
+        Ok(response.get("syncToken").and_then(Value::as_str)
+            .filter(|token| !token.is_empty()).map(str::to_owned))
     }
 
     pub async fn lookup(&self, names: &[String]) -> Result<Vec<Value>> {
@@ -170,10 +183,13 @@ impl<'a> CloudKit<'a> {
     ) -> Result<(Vec<Value>, Option<String>)> {
         let mut changes = Vec::new();
         let mut marker = cursor.map(str::to_owned);
+        let mut pages = PageGuard::default();
+        if let Some(cursor) = cursor { pages.seen.insert(cursor.to_owned()); }
         loop {
             let mut zone = json!({"zoneID":reminders_zone()});
             if let Some(record_types) = desired_record_types {
                 zone["desiredRecordTypes"] = json!(record_types);
+                if record_types.is_empty() { zone["desiredKeys"] = json!([]); }
             }
             if let Some(value) = &marker {
                 zone["syncToken"] = Value::String(value.clone());
@@ -185,6 +201,7 @@ impl<'a> CloudKit<'a> {
                 .and_then(Value::as_array)
                 .and_then(|zones| zones.first())
                 .unwrap_or(&response);
+            reject_embedded_errors(std::slice::from_ref(page))?;
             if let Some(items) = page
                 .get("records")
                 .or_else(|| page.get("changes"))
@@ -196,12 +213,14 @@ impl<'a> CloudKit<'a> {
                 .get("moreComing")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            marker = page
+            let next = page
                 .get("syncToken")
                 .or_else(|| page.get("continuationMarker"))
                 .and_then(Value::as_str)
-                .map(str::to_owned)
-                .or(marker);
+                .map(str::to_owned);
+            if more { pages.advance(next.as_deref())?; }
+            marker = next.or(marker);
+            eprintln!("sync: changes page, records={}, more={more}", changes.len());
             if !more {
                 return Ok((changes, marker));
             }
@@ -209,6 +228,8 @@ impl<'a> CloudKit<'a> {
     }
 
     async fn post(&self, operation: &str, body: &Value) -> Result<Value> {
+        let started = std::time::Instant::now();
+        eprintln!("sync: requesting {operation}");
         let response = self
             .auth
             .http()
@@ -228,10 +249,25 @@ impl<'a> CloudKit<'a> {
             .await?;
         let status = response.status();
         let text = bounded_response_text_with_limit(response, MAX_CLOUDKIT_RESPONSE_BYTES).await?;
+        eprintln!("sync: {operation} HTTP {} bytes={} elapsed_ms={}", status.as_u16(), text.len(), started.elapsed().as_millis());
         if !status.is_success() {
             return Err(classify_cloudkit(status, &text));
         }
         serde_json::from_str(&text).map_err(Into::into)
+    }
+}
+
+// Bound pagination and reject missing/repeated tokens rather than spinning forever.
+#[derive(Default)]
+struct PageGuard { seen: HashSet<String> }
+impl PageGuard {
+    fn advance(&mut self, token: Option<&str>) -> Result<()> {
+        let token = token.filter(|s| !s.is_empty()).ok_or_else(||
+            AppError::internal("iCloud pagination stopped advancing (missing token)", ""))?;
+        if self.seen.len() >= 1000 || !self.seen.insert(token.to_owned()) {
+            return Err(AppError::internal("iCloud pagination stopped advancing or exceeded 1,000 pages", ""));
+        }
+        Ok(())
     }
 }
 
@@ -464,5 +500,19 @@ mod tests {
         assert_eq!(reference_field(&record, "listRef").as_deref(), Some("list-1"));
         assert!(field(&record, "missing").is_none());
         assert_eq!(int_field(&record, "missing"), 0, "absent ints default to zero");
+    }
+}
+
+#[cfg(test)]
+mod pagination_tests {
+    use super::*;
+    #[test]
+    fn rejects_missing_repeated_and_cyclic_tokens() {
+        let mut pages = PageGuard::default();
+        assert!(pages.advance(None).is_err());
+        assert!(pages.advance(Some("")).is_err());
+        assert!(pages.advance(Some("a")).is_ok());
+        assert!(pages.advance(Some("b")).is_ok());
+        assert!(pages.advance(Some("a")).is_err());
     }
 }

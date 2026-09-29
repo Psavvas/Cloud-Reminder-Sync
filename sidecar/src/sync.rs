@@ -15,7 +15,7 @@ pub const CURSOR_KEY: &str = "sync_cursor";
 pub const LAST_FULL_KEY: &str = "last_full_sync";
 pub const LAST_SYNC_KEY: &str = "last_sync";
 const READ_PROTOCOL_KEY: &str = "cloudkit_read_protocol";
-const READ_PROTOCOL_VERSION: &str = "2";
+const READ_PROTOCOL_VERSION: &str = "3";
 
 pub struct SyncEngine {
     cache: Arc<Cache>,
@@ -53,14 +53,25 @@ impl SyncEngine {
         let _ = self.events.send(json!({"event":event,"data":data}));
     }
 
+    fn progress(&self, message: &str) {
+        eprintln!("sync: {message}");
+        self.emit("sync_progress", json!({"message":message}));
+    }
+
     pub async fn sync_now(&self, full: bool) -> Result<Value> {
         if self.running.swap(true, Ordering::AcqRel) {
             return Ok(json!({"queued":false,"reason":"already running"}));
         }
         let _guard = RunningGuard(&self.running);
-        let push = self.push_with_reauth().await?;
-        let pull = self.pull_with_reauth(full).await?;
-        Ok(json!({"push":push,"pull":pull}))
+        tokio::time::timeout(std::time::Duration::from_secs(600), async {
+            self.progress("Uploading queued changes...");
+            let push = self.push_with_reauth().await?;
+            let pull = self.pull_with_reauth(full).await?;
+            Ok(json!({"push":push,"pull":pull}))
+        }).await.unwrap_or_else(|_| Err(AppError::Network {
+            message: "Sync timed out after 10 minutes. Cached reminders are available; try syncing again. See RemindersSync/logs/app.log for the last request.".into(),
+            detail: String::new(),
+        }))
     }
 
     pub async fn push_now(&self) -> Result<Value> {
@@ -148,7 +159,9 @@ impl SyncEngine {
 
     async fn full_sync(&self) -> Result<Value> {
         self.emit("sync_started", json!({"mode":"full","determinate":true}));
+        self.progress("Getting the current iCloud sync position...");
         let cursor = self.client.lock().await.sync_cursor().await?;
+        self.progress("Downloading reminder lists...");
         let lists = self.client.lock().await.lists().await?;
         self.cache.replace_lists(&lists)?;
         let work: Vec<_> = lists.iter().filter(|list| !list.is_group).collect();
@@ -159,13 +172,15 @@ impl SyncEngine {
         let mut spent = 0i64;
         let mut reminder_ids = Vec::new();
         for (index, list) in work.iter().enumerate() {
+            self.progress(&format!("Downloading list {} of {}...", index + 1, work.len()));
             let reminders = self.client.lock().await.reminders_for(&list.id).await?;
             self.cache.upsert_reminders(&reminders)?;
             reminder_ids.extend(reminders.iter().map(|reminder| reminder.id.clone()));
             total += reminders.len();
             spent += weights[index];
-            self.emit("sync_progress",json!({"stage":"reminders","list":list.title,"index":index+1,"done":index+1,"of":work.len(),"total":total,"percent":((1000*spent/budget) as f64)/10.0}));
+            self.emit("sync_progress",json!({"stage":"reminders","message":format!("Downloaded list {} of {} ({} reminders)", index+1, work.len(), total),"index":index+1,"done":index+1,"of":work.len(),"total":total,"percent":((1000*spent/budget) as f64)/10.0}));
         }
+        self.progress("Downloading reminder tags...");
         let tags = self
             .client
             .lock()
@@ -194,12 +209,14 @@ impl SyncEngine {
             .get_meta(CURSOR_KEY)?
             .ok_or_else(|| AppError::internal("Delta sync started without a cursor", ""))?;
         self.emit("sync_started", json!({"mode":"delta","determinate":false}));
+        self.progress("Downloading reminder lists...");
         let lists = self.client.lock().await.lists().await?;
         self.cache.replace_lists(&lists)?;
         self.emit(
             "sync_progress",
             json!({"stage":"lists","count":lists.len()}),
         );
+        self.progress("Downloading changed reminders...");
         let (updated, deleted, new_cursor) = self
             .client
             .lock()
@@ -216,6 +233,7 @@ impl SyncEngine {
                 .iter()
                 .map(|reminder| reminder.id.clone())
                 .collect::<Vec<_>>();
+            self.progress("Downloading reminder tags...");
             let tags = self.client.lock().await.tags_for_reminders(&ids).await?;
             for reminder in &updated {
                 self.cache.replace_tags_for(

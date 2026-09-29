@@ -251,7 +251,7 @@ impl ICloudClient {
         let (records, _) = self.cloudkit()?.changes(None, Some(&["List"])).await?;
         let mut lists = Vec::new();
         for (position, record) in records.iter().enumerate() {
-            if cloudkit::int_field(record, "Deleted") != 0 {
+            if !active_list_record(record) {
                 continue;
             }
             let id = record
@@ -359,7 +359,10 @@ impl ICloudClient {
     }
 
     pub async fn sync_cursor(&self) -> Result<Option<String>> {
-        let (_, _, cursor) = self.changes_since(None).await?;
+        if let Some(token) = self.cloudkit()?.current_sync_token().await? {
+            return Ok(Some(token));
+        }
+        let (_, cursor) = self.cloudkit()?.changes(None, Some(&[])).await?;
         Ok(cursor)
     }
 
@@ -569,6 +572,14 @@ impl ICloudClient {
     }
 }
 
+fn active_list_record(record: &Value) -> bool {
+    record.get("recordType").and_then(Value::as_str) == Some("List")
+        && record.get("deleted").and_then(Value::as_bool) != Some(true)
+        && record.get("reason").and_then(Value::as_str) != Some("deleted")
+        && cloudkit::int_field(record, "Deleted") == 0
+        && record.get("fields").and_then(Value::as_object).is_some()
+}
+
 fn record_to_reminder(record: &Value) -> Option<Reminder> {
     let id = record.get("recordName")?.as_str()?.to_owned();
     let time_zone = cloudkit::text_field(record, "TimeZone");
@@ -577,8 +588,10 @@ fn record_to_reminder(record: &Value) -> Option<Reminder> {
     Some(Reminder {
         id,
         list_id: cloudkit::reference_field(record, "List").unwrap_or_default(),
-        title: cloudkit::text_field(record, "Title").unwrap_or_default(),
-        description: cloudkit::text_field(record, "Description").unwrap_or_default(),
+        title: crate::document::text(record, "TitleDocument")
+            .or_else(|| cloudkit::text_field(record, "Title")).unwrap_or_default(),
+        description: crate::document::text(record, "NotesDocument")
+            .or_else(|| cloudkit::text_field(record, "Description")).unwrap_or_default(),
         due_date,
         time_zone,
         priority: cloudkit::int_field(record, "Priority"),
@@ -723,5 +736,32 @@ mod session_tests {
         let status = client.status();
         assert_eq!(status["needs_2fa"], false);
         assert_eq!(status["two_factor"]["method"], "unknown");
+    }
+}
+
+#[cfg(test)]
+mod read_regression_tests {
+    use super::*;
+    #[test]
+    fn ignores_tombstones_and_unrelated_records_in_list_snapshot() {
+        assert!(active_list_record(&json!({"recordType":"List","fields":{"Name":{"value":"School"}}})));
+        for record in [
+            json!({"recordName":"List/old","deleted":true}),
+            json!({"recordType":"List","deleted":true,"fields":{}}),
+            json!({"recordType":"List","reason":"deleted","fields":{}}),
+            json!({"recordType":"List","fields":{"Deleted":{"value":1}}}),
+            json!({"recordType":"Reminder","fields":{}}),
+        ] { assert!(!active_list_record(&record)); }
+    }
+    #[test]
+    fn reads_document_titles_and_notes_before_legacy_fields() {
+        let record = json!({"recordName":"Reminder/test", "fields":{
+            "TitleDocument":{"value":"EgVIZWxsbw==","type":"ENCRYPTED_BYTES"},
+            "NotesDocument":{"value":"EgVIZWxsbw==","type":"STRING"},
+            "Title":{"value":"old"}
+        }});
+        let reminder = record_to_reminder(&record).unwrap();
+        assert_eq!(reminder.title, "Hello");
+        assert_eq!(reminder.description, "Hello");
     }
 }

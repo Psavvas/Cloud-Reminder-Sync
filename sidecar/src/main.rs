@@ -11,6 +11,7 @@
 mod auth;
 mod cache;
 mod cloudkit;
+mod document;
 mod error;
 mod icloud;
 mod model;
