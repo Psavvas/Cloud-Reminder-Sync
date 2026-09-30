@@ -16,6 +16,7 @@ cookies/
 
 # Rust and .NET build output
 .cargo-task-cache/
+.nuget/
 sidecar/target/
 src-windows/**/bin/
 src-windows/**/obj/

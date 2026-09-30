@@ -28,7 +28,7 @@ try {
     }
 
     Write-Host "Building the native Rust sync service for $Architecture..." -ForegroundColor Cyan
-    & cargo build --manifest-path sidecar\Cargo.toml --release --target $target
+    & cargo build --manifest-path sidecar\Cargo.toml --release --locked --target $target
     if ($LASTEXITCODE -ne 0) { throw "Rust sidecar build failed" }
 
     $source = Join-Path $root "sidecar\target\$target\release\reminders-sidecar.exe"

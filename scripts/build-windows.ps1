@@ -4,7 +4,8 @@ param(
     [string]$Configuration = 'Release',
     [ValidateSet('x64', 'ARM64')]
     [string]$Architecture = 'x64',
-    [switch]$SkipSidecar
+    [switch]$SkipSidecar,
+    [switch]$LockedRestore
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,7 +20,9 @@ if (-not $SkipSidecar -or -not (Test-Path -LiteralPath $sidecar)) {
     if ($LASTEXITCODE -ne 0) { throw 'The Rust sidecar build failed.' }
 }
 
-dotnet restore $project --runtime $runtime --ignore-failed-sources
+$restoreArguments = @('restore', $project, '--runtime', $runtime, "-p:Platform=$Architecture")
+if ($LockedRestore) { $restoreArguments += '--locked-mode' }
+dotnet @restoreArguments
 if ($LASTEXITCODE -ne 0) { throw 'The .NET build metadata restore failed.' }
 
 $repositoryPath = [IO.Path]::GetFullPath($repository).TrimEnd('\')

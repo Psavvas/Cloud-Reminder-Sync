@@ -9,136 +9,38 @@ on:
 
 concurrency:
   group: native-windows-${{ github.ref }}
-  # A tag build becomes a release; never cancel one.
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
 
+# Static token limits, rather than only a cache action's save-if, enforce the
+# trust boundary even if repository code tries to use the cache API directly.
+cache-mode: read
+
 jobs:
-  windows:
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - architecture: x64
-            artifact: x64
-            rust_target: x86_64-pc-windows-msvc
-            portable_dir: dist-windows
-          - architecture: ARM64
-            artifact: arm64
-            rust_target: aarch64-pc-windows-msvc
-            portable_dir: dist-windows-arm64
-    defaults:
-      run:
-        shell: pwsh
-    steps:
-      - uses: actions/checkout@v5
+  ci:
+    if: github.event_name != 'push'
+    cache-mode: read
+    uses: ./.github/workflows/native-build.yml
+    with:
+      use-cache: true
 
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: "8.0.x"
+  main:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    cache-mode: write
+    uses: ./.github/workflows/native-build.yml
+    with:
+      use-cache: true
+      save-cache: true
 
-      - uses: dtolnay/rust-toolchain@1.97.1
-        with:
-          targets: ${{ matrix.rust_target }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: sidecar -> target
-
-      # The app version and the sidecar version are separate files that ship as
-      # one product, and the MSIX identity is derived from the csproj alone.
-      # Catch drift here rather than in a released package.
-      - name: Check versions agree
-        if: matrix.architecture == 'x64'
-        run: |
-          $csproj = [xml](Get-Content src-windows/Reminders.WinUI/Reminders.WinUI.csproj)
-          $app = ($csproj.Project.PropertyGroup.Version | Where-Object { $_ }).Trim()
-          $cargo = (Select-String -Path sidecar/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
-          if ($app -ne $cargo) {
-            throw "Version mismatch: csproj is $app but sidecar/Cargo.toml is $cargo."
-          }
-          if ("${{ github.ref }}".StartsWith("refs/tags/v")) {
-            $tag = "${{ github.ref_name }}".TrimStart("v")
-            if ($tag -ne $app) {
-              throw "Tag v$tag does not match the app version $app. Bump the version and re-tag."
-            }
-          }
-          Write-Host "Version $app is consistent."
-
-      - name: Test Rust backend
-        if: matrix.architecture == 'x64'
-        run: cargo test --release --locked --manifest-path sidecar/Cargo.toml
-
-      - name: Lint Rust backend
-        if: matrix.architecture == 'x64'
-        run: |
-          rustup component add clippy
-          cargo clippy --locked --all-targets --manifest-path sidecar/Cargo.toml -- -D warnings
-
-      - name: Audit Rust dependencies
-        if: matrix.architecture == 'x64'
-        run: |
-          cargo install cargo-audit --locked
-          cargo audit --file sidecar/Cargo.lock
-
-      - name: Build Rust backend
-        run: .\scripts\build-sidecar.ps1 -Architecture ${{ matrix.architecture }}
-
-      - name: Build and publish native app
-        run: .\scripts\build-windows.ps1 -Configuration Release -Architecture ${{ matrix.architecture }} -SkipSidecar
-
-      - name: Build unsigned MSIX
-        run: .\scripts\build-msix.ps1 -Architecture ${{ matrix.architecture }} -SkipBuild
-
-      # The .exe installer is the artifact users can actually install. An
-      # unsigned MSIX is refused outright by Windows -- the Install button is
-      # disabled -- whereas an unsigned .exe only draws a SmartScreen warning
-      # the user can dismiss. The MSIX is kept for a future signed or Store
-      # release.
-      - name: Install Inno Setup
-        run: |
-          if (-not (Get-Command ISCC.exe -ErrorAction SilentlyContinue) -and
-              -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
-            choco install innosetup --no-progress -y
-            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
-          }
-          else {
-            Write-Host 'Inno Setup is already present on the runner.'
-          }
-
-      - name: Build installer
-        run: .\scripts\build-installer.ps1 -Architecture ${{ matrix.architecture }} -SkipBuild
-
-      - name: Verify published artifacts
-        run: |
-          $arch = "${{ matrix.architecture }}"
-          $lower = if ($arch -eq 'ARM64') { 'arm64' } else { 'x64' }
-          $expected = @(
-            "${{ matrix.portable_dir }}/Reminders.exe",
-            "${{ matrix.portable_dir }}/reminders-sidecar.exe",
-            "dist-msix/Reminders-for-Windows-$arch.msix",
-            "dist-installer/Reminders-for-Windows-$lower-Setup.exe"
-          )
-          foreach ($path in $expected) {
-            $item = Get-Item -LiteralPath $path -ErrorAction Stop
-            if ($item.Length -eq 0) { throw "Published artifact is empty: $path" }
-            Write-Host ("{0,-64} {1,10:N0} bytes" -f $item.Name, $item.Length)
-          }
-
-      - name: Package portable build
-        run: Compress-Archive -Path "${{ matrix.portable_dir }}/*" -DestinationPath "Reminders-for-Windows-${{ matrix.artifact }}.zip"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Reminders-for-Windows-${{ matrix.artifact }}-${{ github.sha }}
-          path: |
-            dist-installer/Reminders-for-Windows-${{ matrix.artifact }}-Setup.exe
-            Reminders-for-Windows-${{ matrix.artifact }}.zip
-            dist-msix/Reminders-for-Windows-${{ matrix.architecture }}.msix
-          if-no-files-found: error
+  tag:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    cache-mode: none
+    uses: ./.github/workflows/native-build.yml
+    with:
+      use-cache: false
+      release: true
 
   # Tagging v* publishes a draft release carrying both architectures. It is
   # left as a draft on purpose: the MSIX is unsigned, so a human has to decide
@@ -147,14 +49,17 @@ jobs:
   # in-app updater is gone, so existing installs will not upgrade themselves.
   release:
     name: Draft release
-    needs: windows
-    if: startsWith(github.ref, 'refs/tags/v')
+    cache-mode: none
+    needs: tag
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          pattern: Reminders-for-Windows-*-${{ github.sha }}
           path: artifacts
           merge-multiple: true
 
@@ -175,7 +80,7 @@ jobs:
             fi
           done
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
           generate_release_notes: true
