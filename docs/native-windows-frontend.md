@@ -28,6 +28,53 @@ the sidecar or access the real cache. Sample lists and reminders live only in
 memory. The sign-in screen exposes the same path through an **Explore the UI
 with sample data** button.
 
+## Reminder and sidebar controls
+
+Only Today shows a count badge. Today includes unfinished reminders due today
+or earlier; Upcoming shows all unfinished dated reminders, including overdue
+work. Overdue dates include an **Overdue** label and use the Windows critical
+(red) color. All-day reminders become overdue on the following day; timed
+reminders become overdue after their due time.
+
+Right-click a list (or press Shift+F10 while it is focused) to change its icon
+and color or move it up/down. These preferences are stored on this PC in
+`%LOCALAPPDATA%\RemindersForWindows\ui-settings.json`; they do not modify
+list metadata in iCloud. The existing sidebar open/collapsed preference is
+preserved when customization is saved.
+
+Sync now acts as a command and leaves the active list selected. Settings is a
+scrollable dialog grouped into appearance, reminder defaults, sync, and list
+customization guidance. It remembers the saved theme and offers a default
+creation list and a completion-animation toggle.
+
+The New reminder popup accepts notes, list, optional due date, all-day/time,
+priority, and flag before saving. Opening it from Today defaults the due date
+to today; opening it from a list uses that list. Completion holds the checked
+row for 180 ms, then fades it over 420 ms before refreshing. Windows' reduced
+motion preference and the app's animation toggle disable that delay.
+
+Demo mode includes an overdue reminder and supports filtering, creation,
+completion, customization, settings, and deletion in memory.
+
+### Manual UI verification
+
+Run `scripts\run-windows.ps1 -Demo`, then check:
+
+- Today is the only sidebar item with a badge; the sample overdue item is red
+  and labeled in Today and Upcoming.
+- Sync now can be clicked repeatedly without replacing the selected list.
+- Right-click a list, change its icon/color, and move it up/down; tags and the
+  active list remain available.
+- The add popup validates an empty title, allows an undated reminder, and saves
+  due date, time, priority, and flag together.
+- Settings opens on the current theme; Save applies changes and Cancel keeps
+  the prior settings. Reopening shows the saved values.
+- Completing a reminder visibly checks it before it leaves the list; disabling
+  animation removes the pause.
+
+For persistence checks, run the regular app and restart after customizing a
+list. Demo mode intentionally does not write preferences.
+
 ## Build
 
 Node.js and npm are not used. Run these commands from the repository root:

@@ -253,8 +253,8 @@ impl Cache {
                 args.push(to_iso(tomorrow).into());
             }
             Some("upcoming") => {
-                sql.push_str("AND r.completed=0 AND r.due_date IS NOT NULL AND r.due_date>=? ");
-                args.push(to_iso(tomorrow).into());
+                // Keep overdue work visible alongside the rest of the schedule.
+                sql.push_str("AND r.completed=0 AND r.due_date IS NOT NULL ");
             }
             Some("completed") => sql.push_str("AND r.completed=1 "),
             Some("deleted") => {}
@@ -450,7 +450,7 @@ impl Cache {
         };
         Ok(json!({
             "today": count("SELECT COUNT(*) FROM reminders WHERE deleted=0 AND completed=0 AND due_date IS NOT NULL AND due_date<?1", &[&end])?,
-            "upcoming": count("SELECT COUNT(*) FROM reminders WHERE deleted=0 AND completed=0 AND due_date IS NOT NULL AND due_date>=?1", &[&end])?,
+            "upcoming": count("SELECT COUNT(*) FROM reminders WHERE deleted=0 AND completed=0 AND due_date IS NOT NULL", &[])?,
             "completed": count("SELECT COUNT(*) FROM reminders WHERE deleted=0 AND completed=1", &[])?,
             "deleted": count("SELECT COUNT(*) FROM reminders WHERE deleted=1", &[])?,
             "all": count("SELECT COUNT(*) FROM reminders WHERE deleted=0 AND completed=0", &[])?,
@@ -744,6 +744,42 @@ mod tests {
             .unwrap();
         assert_eq!(completed.len(), 1);
         assert_eq!(completed[0].id, "r-done");
+    }
+
+    #[test]
+    fn upcoming_includes_overdue_and_future_but_not_completed_deleted_or_undated() {
+        let (_dir, cache) = cache();
+        let mut overdue = reminder("overdue", "Past due");
+        overdue.due_date = Some("2020-01-01T09:00:00Z".into());
+        let mut future = reminder("future", "Scheduled");
+        future.due_date = Some("2099-01-01T09:00:00Z".into());
+        let mut completed = overdue.clone();
+        completed.id = "done".into();
+        completed.completed = true;
+        let mut deleted = overdue.clone();
+        deleted.id = "deleted".into();
+        deleted.deleted = true;
+        cache
+            .upsert_reminders(&[
+                overdue,
+                future,
+                completed,
+                deleted,
+                reminder("undated", "No due date"),
+            ])
+            .unwrap();
+        let rows = cache
+            .reminders(ReminderQuery { scope: Some("upcoming"), ..query() })
+            .unwrap();
+        let mut ids: Vec<_> = rows.iter().map(|row| row.id.as_str()).collect();
+        ids.sort();
+        assert_eq!(ids, vec!["future", "overdue"]);
+        assert_eq!(cache.smart_counts().unwrap()["upcoming"], json!(2));
+        let today = cache
+            .reminders(ReminderQuery { scope: Some("today"), ..query() })
+            .unwrap();
+        assert_eq!(today.len(), 1);
+        assert_eq!(today[0].id, "overdue");
     }
 
     #[test]
