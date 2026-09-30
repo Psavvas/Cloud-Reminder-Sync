@@ -67,13 +67,15 @@ This addresses the cache-poisoning path; it does not make compromised
 maintainer credentials, malicious changes approved into main, a compromised
 upstream dependency, or GitHub runner compromise harmless. Protect main and
 release tags with review/access rules. At implementation time the repository
-had no repository rulesets; this change does not modify repository access.
+had no repository rulesets and main had no legacy branch protection. This
+change does not modify repository access.
 New reusable-workflow check names may need updating in existing branch
 protection rules.
 
 ## Validation
 
-CI runs `scripts/test_ci_policy.py`: policy checks plus negative cases reject
+CI runs eight tests in `scripts/test_ci_policy.py`: policy checks plus negative
+cases reject
 release cache restores, PR cache writes, privileged builders, bypassed release
 gates, mutable action tags, and artifacts from other runs. Python is used only
 for CI policy tests; the native app still has no Python runtime requirement.

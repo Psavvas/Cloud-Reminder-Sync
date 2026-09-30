@@ -38,6 +38,9 @@ def validate(dispatcher, pipeline):
     assert release['needs'] == 'tag'
     assert release['if'] == jobs['tag']['if']
     assert release['permissions'] == {'contents': 'write'}
+    for step in release['steps']:
+        if step.get('uses'):
+            assert re.fullmatch(r'[\w-]+/[\w/-]+@[0-9a-f]{40}', step['uses'])
     assert not any('checkout@' in step.get('uses', '') or 'cache' in step.get('uses', '') for step in release['steps'])
     download = next(step for step in release['steps'] if 'download-artifact@' in step.get('uses', ''))
     assert download['with']['pattern'] == 'Reminders-for-Windows-*-${{ github.sha }}'
@@ -80,6 +83,9 @@ def validate(dispatcher, pipeline):
     assert not any('cache@' in step.get('uses', '') for step in audit_steps)
     keys = [step['with']['key'] for job in pipeline['jobs'].values() for step in job['steps'] if 'rust-cache@' in step.get('uses', '')]
     assert len(set(keys)) == 2 and any('${{ matrix.rust_target }}' in key for key in keys)
+    publish = next(step['run'] for step in pipeline['jobs']['windows']['steps'] if step.get('name') == 'Build and publish native app')
+    assert '-LockedRestore' in publish
+    assert '--release --locked --target' in (ROOT / 'scripts/build-sidecar.ps1').read_text()
 
 
 class CiPolicyTests(unittest.TestCase):
@@ -112,6 +118,11 @@ class CiPolicyTests(unittest.TestCase):
 
     def test_rejects_unpinned_action(self):
         self.pipeline['jobs']['audit']['steps'][0]['uses'] = 'actions/checkout@v5'
+        with self.assertRaises(AssertionError):
+            validate(self.dispatcher, self.pipeline)
+
+    def test_rejects_unpinned_release_action(self):
+        self.dispatcher['jobs']['release']['steps'][-1]['uses'] = 'softprops/action-gh-release@v2'
         with self.assertRaises(AssertionError):
             validate(self.dispatcher, self.pipeline)
 
