@@ -207,6 +207,7 @@ impl<'a> CloudKit<'a> {
                 .or_else(|| page.get("changes"))
                 .and_then(Value::as_array)
             {
+                reject_embedded_errors(items)?;
                 changes.extend(items.iter().cloned());
             }
             let more = page
@@ -308,9 +309,6 @@ pub fn timestamp_field(record: &Value, name: &str) -> Option<i64> {
 pub fn string(value: impl Into<String>) -> Value {
     json!({"type":"STRING","value":value.into()})
 }
-pub fn encrypted_bytes(value: &str) -> Value {
-    json!({"type":"ENCRYPTED_BYTES","value":B64.encode(value.as_bytes())})
-}
 pub fn int(value: i64) -> Value {
     json!({"type":"INT64","value":value})
 }
@@ -336,18 +334,13 @@ pub fn operation(
 }
 
 pub fn resolution_tokens(names: &[&str]) -> Value {
-    // Apple accepts a JSON string whose keys name the logical fields affected
-    // by the write. Values are monotonically unique opaque tokens.
-    let map: BTreeMap<_, _> = names
-        .iter()
-        .map(|name| {
-            (
-                (*name).to_owned(),
-                uuid::Uuid::new_v4().to_string().to_uppercase(),
-            )
-        })
-        .collect();
-    string(serde_json::to_string(&map).unwrap_or_else(|_| "{}".into()))
+    // Apple's logical-field merge metadata uses seconds since 2001-01-01.
+    let modification_time = chrono::Utc::now().timestamp_millis() as f64 / 1000.0 - 978_307_200.0;
+    let map: BTreeMap<_, _> = names.iter().map(|name| (*name, json!({
+        "counter":1, "modificationTime":modification_time,
+        "replicaID":uuid::Uuid::new_v4().to_string().to_uppercase()
+    }))).collect();
+    string(json!({"map":map}).to_string())
 }
 
 fn reject_embedded_errors(items: &[Value]) -> Result<()> {

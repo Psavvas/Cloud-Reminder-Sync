@@ -32,7 +32,8 @@ public sealed partial class MainWindow : Window
     private bool _verificationBusy;
     private bool _loadingDetail;
     private bool _demo;
-    private int _minutesSinceSync;
+    private DateTimeOffset _lastSyncRequest = DateTimeOffset.MinValue;
+    private bool _bootStarted;
     private bool _notificationsRegistered;
     private bool _panePinnedOpen;
     private bool _hoverExpanded;
@@ -79,7 +80,14 @@ public sealed partial class MainWindow : Window
 
     private async void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
     {
-        Activated -= MainWindow_Activated;
+        if (args.WindowActivationState == WindowActivationState.Deactivated) return;
+        if (_bootStarted)
+        {
+            if (AuthGate.Visibility == Visibility.Collapsed && DateTimeOffset.UtcNow - _lastSyncRequest >= TimeSpan.FromSeconds(30))
+                await RequestAutoSyncAsync();
+            return;
+        }
+        _bootStarted = true;
         if (Environment.GetCommandLineArgs().Contains("--demo", StringComparer.OrdinalIgnoreCase) || Environment.GetEnvironmentVariable("REMINDERS_DEMO") == "1")
         {
             LoadDemo();
@@ -111,6 +119,7 @@ public sealed partial class MainWindow : Window
                 AuthGate.Visibility = Visibility.Collapsed;
                 await RefreshAllAsync();
                 _statusTimer.Start(); _notificationTimer.Start(); _syncTimer.Start();
+                if (status.Flag("authenticated")) await RequestAutoSyncAsync();
                 if (!status.Flag("authenticated") && !status.Flag("restoring")) ShowInfo("Sign in to resume syncing", "Cached reminders and queued edits remain available.", InfoBarSeverity.Warning);
                 return;
             }
@@ -244,9 +253,17 @@ public sealed partial class MainWindow : Window
     }
     private async Task BackgroundSyncAsync()
     {
-        if (_demo || ++_minutesSinceSync < Math.Clamp((int)_settings.Number("sync_minutes"), 5, 60)) return;
-        _minutesSinceSync = 0;
-        try { await _sidecar.CallAsync("sync", new { }); } catch { }
+        var minutes = _settings.TryGetProperty("sync_minutes", out var setting) && setting.TryGetInt32(out var value) ? Math.Clamp(value, 5, 60) : 10;
+        if (DateTimeOffset.UtcNow - _lastSyncRequest < TimeSpan.FromMinutes(minutes)) return;
+        await RequestAutoSyncAsync();
+    }
+
+    private async Task RequestAutoSyncAsync()
+    {
+        if (_demo || !_sidecar.IsRunning) return;
+        _lastSyncRequest = DateTimeOffset.UtcNow;
+        try { await _sidecar.CallAsync("sync", new { }); }
+        catch (Exception error) { ShowInfo("Sync failed", error.Message, InfoBarSeverity.Error); }
     }
 
     private async void SignIn_Click(object sender, RoutedEventArgs e)
@@ -559,13 +576,14 @@ public sealed partial class MainWindow : Window
                     ShowInfo("Sign in to resume syncing", "Cached reminders and queued edits remain available.", InfoBarSeverity.Warning);
                 else ShowLogin();
                 break;
-            case "sync_started": ShowInfo("Syncing", "Checking iCloud for changes…", InfoBarSeverity.Informational); break;
+            case "sync_started": _lastSyncRequest = DateTimeOffset.UtcNow; ShowInfo("Syncing", "Checking iCloud for changes…", InfoBarSeverity.Informational); break;
             case "sync_progress":
                 ShowInfo("Syncing", e.Data.Text("message", $"Processing {e.Data.Text("stage", "reminders")}..."), InfoBarSeverity.Informational);
                 break;
             case "sync_finished": AppInfoBar.IsOpen = false; await RefreshAllAsync(); break;
             case "sync_error": ShowInfo("Sync failed", e.Data.Text("message", "Try again in a moment."), InfoBarSeverity.Error); break;
-            case "conflict": await RefreshStatusAsync(); break;
+            case "push_failed": ShowInfo("Upload failed", e.Data.Property("error").Text("message", "Your edit is saved locally and will be retried."), InfoBarSeverity.Error); break;
+            case "conflict": ShowInfo("Sync conflict", "This reminder also changed in iCloud. Open sync conflicts to choose which version to keep.", InfoBarSeverity.Warning); await RefreshStatusAsync(); break;
         }
     });
     private async void MainWindow_Closed(object sender, WindowEventArgs args)

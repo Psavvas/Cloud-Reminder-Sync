@@ -296,8 +296,7 @@ impl ICloudClient {
         let hashtags = self
             .cloudkit()?
             .query("Hashtag", Vec::new())
-            .await
-            .unwrap_or_default();
+            .await?;
         let mut tags: BTreeMap<String, Vec<Tag>> = BTreeMap::new();
         for record in hashtags {
             if cloudkit::int_field(&record, "Deleted") != 0 {
@@ -326,36 +325,9 @@ impl ICloudClient {
         Ok(tags)
     }
 
-    pub async fn changes_since(
-        &self,
-        cursor: Option<&str>,
-    ) -> Result<(Vec<Reminder>, Vec<String>, Option<String>)> {
-        let (records, new_cursor) = self
-            .cloudkit()?
-            .changes(cursor, Some(&["Reminder"]))
-            .await?;
-        let mut updated = Vec::new();
-        let mut deleted = Vec::new();
-        for record in records {
-            if record.get("recordType").and_then(Value::as_str) != Some("Reminder") {
-                continue;
-            }
-            let id = record
-                .get("recordName")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            if record.get("deleted").and_then(Value::as_bool) == Some(true)
-                || record.get("reason").and_then(Value::as_str) == Some("deleted")
-            {
-                if !id.is_empty() {
-                    deleted.push(id);
-                }
-            } else if let Some(reminder) = record_to_reminder(&record) {
-                updated.push(reminder);
-            }
-        }
-        Ok((updated, deleted, new_cursor))
+    pub async fn changes_since(&self, cursor: Option<&str>) -> Result<RemoteChanges> {
+        let (records, cursor) = self.cloudkit()?.changes(cursor, Some(&["Reminder", "List", "Hashtag"])).await?;
+        Ok(parse_changes(records, cursor))
     }
 
     pub async fn sync_cursor(&self) -> Result<Option<String>> {
@@ -378,19 +350,8 @@ impl ICloudClient {
         let now = Utc::now().timestamp_millis();
         let mut values = Map::new();
         values.insert("List".into(), cloudkit::reference(list_id));
-        values.insert(
-            "Title".into(),
-            cloudkit::encrypted_bytes(object.get("title").and_then(Value::as_str).unwrap_or("")),
-        );
-        values.insert(
-            "Description".into(),
-            cloudkit::encrypted_bytes(
-                object
-                    .get("description")
-                    .and_then(Value::as_str)
-                    .unwrap_or(""),
-            ),
-        );
+        values.insert("TitleDocument".into(), cloudkit::string(crate::document::encode(object.get("title").and_then(Value::as_str).unwrap_or(""))?));
+        values.insert("NotesDocument".into(), cloudkit::string(crate::document::encode(object.get("description").and_then(Value::as_str).unwrap_or(""))?));
         values.insert(
             "Priority".into(),
             cloudkit::int(object.get("priority").and_then(Value::as_i64).unwrap_or(0)),
@@ -414,6 +375,7 @@ impl ICloudClient {
             ),
         );
         values.insert("Completed".into(), cloudkit::int(0));
+        values.insert("CompletionDate".into(), json!({"type":"TIMESTAMP","value":null}));
         values.insert("Deleted".into(), cloudkit::int(0));
         values.insert("CreationDate".into(), cloudkit::timestamp(now));
         values.insert("LastModifiedDate".into(), cloudkit::timestamp(now));
@@ -426,8 +388,11 @@ impl ICloudClient {
         values.insert(
             "ResolutionTokenMap".into(),
             cloudkit::resolution_tokens(&[
-                "title",
-                "description",
+                "titleDocument",
+                "notesDocument",
+                "completed",
+                "completionDate",
+                "lastModifiedDate",
                 "priority",
                 "flagged",
                 "allDay",
@@ -459,7 +424,7 @@ impl ICloudClient {
         base_tag: Option<&str>,
     ) -> Result<Reminder> {
         let mut records = self.cloudkit()?.lookup(&[id.to_owned()]).await?;
-        let mut record = records
+        let record = records
             .pop()
             .ok_or_else(|| AppError::bad_request(format!("No such reminder: {id}")))?;
         let remote_tag = record.get("recordChangeTag").and_then(Value::as_str);
@@ -472,104 +437,135 @@ impl ICloudClient {
                     .unwrap_or_default(),
             });
         }
-        let patch = payload
-            .as_object()
-            .ok_or_else(|| AppError::bad_request("update payload must be an object"))?;
-        let zone_for_write = cloudkit::text_field(&record, "TimeZone");
-        let record_debug = record.to_string();
-        let target = record
-            .get_mut("fields")
-            .and_then(Value::as_object_mut)
-            .ok_or_else(|| {
-                AppError::internal("iCloud returned a reminder without fields", record_debug)
-            })?;
-        let mut tokens = Vec::new();
-        for (json_name, cloud_name, token) in [
-            ("title", "Title", "title"),
-            ("description", "Description", "description"),
-        ] {
-            if let Some(value) = patch.get(json_name) {
-                let text = value.as_str().unwrap_or("");
-                let encoded = if target
-                    .get(cloud_name)
-                    .and_then(|v| v.get("type"))
-                    .and_then(Value::as_str)
-                    == Some("STRING")
-                {
-                    cloudkit::string(text)
-                } else {
-                    cloudkit::encrypted_bytes(text)
-                };
-                target.insert(cloud_name.into(), encoded);
-                tokens.push(token);
-            }
-        }
-        for (json_name, cloud_name, token) in [
-            ("priority", "Priority", "priority"),
-            ("completed", "Completed", "completed"),
-            ("flagged", "Flagged", "flagged"),
-            ("deleted", "Deleted", "deleted"),
-            ("all_day", "AllDay", "allDay"),
-        ] {
-            if let Some(value) = patch.get(json_name) {
-                target.insert(
-                    cloud_name.into(),
-                    cloudkit::int(
-                        value
-                            .as_i64()
-                            .unwrap_or_else(|| value.as_bool().unwrap_or(false) as i64),
-                    ),
-                );
-                tokens.push(token);
-            }
-        }
-        if let Some(completed) = patch.get("completed").and_then(Value::as_bool) {
-            if completed {
-                target.insert(
-                    "CompletionDate".into(),
-                    cloudkit::timestamp(Utc::now().timestamp_millis()),
-                );
-            } else {
-                target.remove("CompletionDate");
-            }
-        }
-        if let Some(value) = patch.get("due_date") {
-            if value.is_null() {
-                target.remove("DueDate");
-            } else if let Some(raw) = value.as_str() {
-                target.insert(
-                    "DueDate".into(),
-                    cloudkit::timestamp(instant_to_floating_millis(
-                        parse_instant(raw)?,
-                        zone_for_write.as_deref(),
-                    )),
-                );
-            }
-            tokens.push("dueDate");
-        }
-        target.insert(
-            "LastModifiedDate".into(),
-            cloudkit::timestamp(Utc::now().timestamp_millis()),
-        );
-        target.insert(
-            "ResolutionTokenMap".into(),
-            cloudkit::resolution_tokens(&tokens),
-        );
+        let fields = update_fields(&record, payload)?;
+        let operation = cloudkit::operation("update", id, "Reminder", remote_tag, Value::Object(fields.clone()));
         let result = self
             .cloudkit()?
-            .modify(vec![json!({"operationType":"update","record":record})])
+            .modify(vec![operation])
             .await?;
-        result.first().and_then(record_to_reminder).ok_or_else(|| {
-            AppError::internal(
-                "iCloud did not return the updated reminder",
-                result.first().map(Value::to_string).unwrap_or_default(),
-            )
-        })
+        let returned = result.first().ok_or_else(|| AppError::internal("iCloud did not return the updated reminder", ""))?;
+        // CloudKit may return only changed fields. Keep the untouched title,
+        // list reference, and dates from the lookup instead of blanking cache.
+        record_to_reminder(&merge_updated_record(record, fields, returned))
+            .ok_or_else(|| AppError::internal("iCloud returned an invalid updated reminder", ""))
     }
 
     pub async fn delete(&self, id: &str, base_tag: Option<&str>) -> Result<Reminder> {
         self.update(id, &json!({"deleted":true}), base_tag).await
     }
+}
+
+#[derive(Default)]
+pub struct RemoteChanges {
+    pub updated: Vec<Reminder>,
+    pub deleted: Vec<String>,
+    pub cursor: Option<String>,
+    pub lists_changed: bool,
+    pub tags_changed: bool,
+}
+
+fn parse_changes(records: Vec<Value>, cursor: Option<String>) -> RemoteChanges {
+    let mut changes = RemoteChanges { cursor, ..Default::default() };
+    for record in records {
+        let id = record.get("recordName").and_then(Value::as_str).unwrap_or_default();
+        let kind = record.get("recordType").and_then(Value::as_str)
+            .unwrap_or_else(|| id.split('/').next().unwrap_or_default());
+        match kind {
+            "List" => changes.lists_changed = true,
+            "Hashtag" => changes.tags_changed = true,
+            "Reminder" => {
+                if record.get("deleted").and_then(Value::as_bool) == Some(true)
+                    || record.get("reason").and_then(Value::as_str) == Some("deleted") {
+                    if !id.is_empty() { changes.deleted.push(id.to_owned()); }
+                } else if let Some(reminder) = record_to_reminder(&record) {
+                    changes.updated.push(reminder);
+                }
+            }
+            _ => {}
+        }
+    }
+    changes
+}
+
+fn merge_updated_record(mut original: Value, fields: Map<String, Value>, returned: &Value) -> Value {
+    if !original["fields"].is_object() { original["fields"] = json!({}); }
+    let target = original["fields"].as_object_mut().unwrap();
+    target.extend(fields);
+    if let Some(remote) = returned.get("fields").and_then(Value::as_object) { target.extend(remote.clone()); }
+    if let Some(tag) = returned.get("recordChangeTag") { original["recordChangeTag"] = tag.clone(); }
+    original
+}
+
+fn update_fields(record: &Value, payload: &Value) -> Result<Map<String, Value>> {
+    let patch = payload
+        .as_object()
+        .ok_or_else(|| AppError::bad_request("update payload must be an object"))?;
+    let zone_for_write = cloudkit::text_field(record, "TimeZone");
+    let mut target = Map::new();
+    let mut tokens = Vec::new();
+    for (json_name, cloud_name, token) in [
+        ("title", "TitleDocument", "titleDocument"),
+        ("description", "NotesDocument", "notesDocument"),
+    ] {
+        if let Some(value) = patch.get(json_name) {
+            target.insert(cloud_name.into(), cloudkit::string(crate::document::encode(value.as_str().unwrap_or(""))?));
+            tokens.push(token);
+        }
+    }
+    for (json_name, cloud_name, token) in [
+        ("priority", "Priority", "priority"),
+        ("completed", "Completed", "completed"),
+        ("flagged", "Flagged", "flagged"),
+        ("deleted", "Deleted", "deleted"),
+        ("all_day", "AllDay", "allDay"),
+    ] {
+        if let Some(value) = patch.get(json_name) {
+            target.insert(
+                cloud_name.into(),
+                cloudkit::int(
+                    value
+                        .as_i64()
+                        .unwrap_or_else(|| value.as_bool().unwrap_or(false) as i64),
+                ),
+            );
+            tokens.push(token);
+        }
+    }
+    if let Some(completed) = patch.get("completed").and_then(|v| v.as_bool().or_else(|| v.as_i64().map(|n| n != 0))) {
+        if completed {
+            target.insert(
+                "CompletionDate".into(),
+                cloudkit::timestamp(Utc::now().timestamp_millis()),
+            );
+        } else {
+            target.insert("CompletionDate".into(), json!({"type":"TIMESTAMP","value":null}));
+        }
+    }
+    if patch.contains_key("completed") { tokens.push("completionDate"); }
+    tokens.push("lastModifiedDate");
+    if let Some(value) = patch.get("due_date") {
+        if value.is_null() {
+            target.insert("DueDate".into(), json!({"type":"TIMESTAMP","value":null}));
+        } else if let Some(raw) = value.as_str() {
+            target.insert(
+                "DueDate".into(),
+                cloudkit::timestamp(instant_to_floating_millis(
+                    parse_instant(raw)?,
+                    zone_for_write.as_deref(),
+                )),
+            );
+        }
+        tokens.push("dueDate");
+    }
+    target.insert(
+        "LastModifiedDate".into(),
+        cloudkit::timestamp(Utc::now().timestamp_millis()),
+    );
+    target.insert(
+        "ResolutionTokenMap".into(),
+        cloudkit::resolution_tokens(&tokens),
+    );
+    Ok(target)
 }
 
 fn active_list_record(record: &Value) -> bool {
@@ -742,6 +738,61 @@ mod session_tests {
 #[cfg(test)]
 mod read_regression_tests {
     use super::*;
+    #[test]
+    fn partial_modify_response_preserves_unmodified_fields() {
+        let original = json!({"recordName":"Reminder/a", "fields":{
+            "Title":{"value":"Keep title"}, "List":{"value":{"recordName":"List/a"}}, "Completed":{"value":0}
+        }});
+        let patch = update_fields(&original, &json!({"completed":1})).unwrap();
+        let merged = merge_updated_record(original, patch, &json!({"recordName":"Reminder/a","recordChangeTag":"new"}));
+        let reminder = record_to_reminder(&merged).unwrap();
+        assert!(reminder.completed);
+        assert_eq!(reminder.title, "Keep title");
+        assert_eq!(reminder.list_id, "List/a");
+        assert_eq!(reminder.change_tag.as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn completion_patch_accepts_the_integer_outbox_and_boolean_inputs() {
+        for completed in [json!(true), json!(1), json!(false), json!(0)] {
+            let fields = update_fields(&json!({}), &json!({"completed":completed})).unwrap();
+            let value = completed.as_bool().unwrap_or_else(|| completed.as_i64().unwrap() != 0);
+            assert_eq!(fields["Completed"]["value"], json!(value as i64));
+            assert_eq!(fields["CompletionDate"]["value"].is_number(), value);
+            assert_eq!(fields["CompletionDate"]["value"].is_null(), !value);
+            let metadata: Value = serde_json::from_str(fields["ResolutionTokenMap"]["value"].as_str().unwrap()).unwrap();
+            for name in ["completed", "completionDate", "lastModifiedDate"] {
+                assert_eq!(metadata["map"][name]["counter"], 1);
+                assert!(metadata["map"][name]["modificationTime"].as_f64().unwrap() > 700_000_000.0);
+                assert!(Uuid::parse_str(metadata["map"][name]["replicaID"].as_str().unwrap()).is_ok());
+            }
+            assert!(!fields.contains_key("TitleDocument"));
+        }
+    }
+    #[test]
+    fn text_updates_use_documents_and_clears_send_explicit_null() {
+        let fields = update_fields(&json!({}), &json!({"title":"Test", "description":"Notes", "due_date":null})).unwrap();
+        let record = json!({"fields":fields});
+        assert_eq!(crate::document::text(&record, "TitleDocument").as_deref(), Some("Test"));
+        assert_eq!(crate::document::text(&record, "NotesDocument").as_deref(), Some("Notes"));
+        assert!(record["fields"]["DueDate"]["value"].is_null());
+    }
+    #[test]
+    fn delta_detects_related_changes_and_tombstones_without_types() {
+        let changes = parse_changes(vec![
+            json!({"recordName":"Reminder/a","fields":{}}),
+            json!({"recordName":"Reminder/b","deleted":true}),
+            json!({"recordName":"List/c","deleted":true}),
+            json!({"recordType":"Hashtag","recordName":"Hashtag/d"}),
+        ], Some("next".into()));
+        assert_eq!(changes.updated.len(), 1);
+        assert_eq!(changes.deleted, vec!["Reminder/b"]);
+        assert!(changes.lists_changed && changes.tags_changed);
+        assert_eq!(changes.cursor.as_deref(), Some("next"));
+        let empty = parse_changes(vec![], None);
+        assert!(!empty.lists_changed && !empty.tags_changed);
+    }
+
     #[test]
     fn ignores_tombstones_and_unrelated_records_in_list_snapshot() {
         assert!(active_list_record(&json!({"recordType":"List","fields":{"Name":{"value":"School"}}})));

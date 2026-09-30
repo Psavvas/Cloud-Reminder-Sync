@@ -491,7 +491,7 @@ impl Server {
         let sync = self.sync.clone();
         let events = self.events.clone();
         tokio::spawn(async move {
-            if let Err(error) = sync.push_now().await {
+            if let Err(error) = sync.sync_now(false).await {
                 let _ = events.send(json!({"event":"sync_error","data":error.body()}));
             }
         });

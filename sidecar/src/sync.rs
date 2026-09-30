@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -22,7 +22,10 @@ pub struct SyncEngine {
     client: Arc<Mutex<ICloudClient>>,
     events: UnboundedSender<Value>,
     running: AtomicBool,
-    pushing: Mutex<()>,
+    serial: Mutex<()>,
+    requested: AtomicU64,
+    completed: AtomicU64,
+    full_requested: AtomicBool,
 }
 
 struct RunningGuard<'a>(&'a AtomicBool);
@@ -43,7 +46,10 @@ impl SyncEngine {
             client,
             events,
             running: AtomicBool::new(false),
-            pushing: Mutex::new(()),
+            serial: Mutex::new(()),
+            requested: AtomicU64::new(0),
+            completed: AtomicU64::new(0),
+            full_requested: AtomicBool::new(false),
         }
     }
     pub fn running(&self) -> bool {
@@ -59,23 +65,31 @@ impl SyncEngine {
     }
 
     pub async fn sync_now(&self, full: bool) -> Result<Value> {
-        if self.running.swap(true, Ordering::AcqRel) {
-            return Ok(json!({"queued":false,"reason":"already running"}));
+        if full { self.full_requested.store(true, Ordering::Release); }
+        let ticket = self.requested.fetch_add(1, Ordering::AcqRel) + 1;
+        let _serial = self.serial.lock().await;
+        if self.completed.load(Ordering::Acquire) >= ticket {
+            return Ok(json!({"coalesced":true}));
         }
+        self.running.store(true, Ordering::Release);
         let _guard = RunningGuard(&self.running);
-        tokio::time::timeout(std::time::Duration::from_secs(600), async {
-            self.progress("Uploading queued changes...");
-            let push = self.push_with_reauth().await?;
-            let pull = self.pull_with_reauth(full).await?;
-            Ok(json!({"push":push,"pull":pull}))
-        }).await.unwrap_or_else(|_| Err(AppError::Network {
-            message: "Sync timed out after 10 minutes. Cached reminders are available; try syncing again. See RemindersSync/logs/app.log for the last request.".into(),
-            detail: String::new(),
-        }))
-    }
-
-    pub async fn push_now(&self) -> Result<Value> {
-        self.push_with_reauth().await
+        loop {
+            let generation = self.requested.load(Ordering::Acquire);
+            let full = self.full_requested.swap(false, Ordering::AcqRel);
+            let result = tokio::time::timeout(std::time::Duration::from_secs(600), async {
+                self.progress("Uploading queued changes...");
+                let push = self.push_with_reauth().await?;
+                let pull = self.pull_with_reauth(full).await?;
+                Ok(json!({"push":push,"pull":pull}))
+            }).await.unwrap_or_else(|_| Err(AppError::Network {
+                message: "Sync timed out after 10 minutes. Cached reminders are available; try syncing again. See RemindersSync/logs/app.log for the last request.".into(),
+                detail: String::new(),
+            }));
+            if result.is_err() && full { self.full_requested.store(true, Ordering::Release); }
+            let result = result?;
+            self.completed.store(generation, Ordering::Release);
+            if self.requested.load(Ordering::Acquire) == generation && self.cache.pending(1)?.is_empty() { return Ok(result); }
+        }
     }
 
     /// Rebuild the session once after Apple refuses a request, or explain why not.
@@ -209,36 +223,29 @@ impl SyncEngine {
             .get_meta(CURSOR_KEY)?
             .ok_or_else(|| AppError::internal("Delta sync started without a cursor", ""))?;
         self.emit("sync_started", json!({"mode":"delta","determinate":false}));
-        self.progress("Downloading reminder lists...");
-        let lists = self.client.lock().await.lists().await?;
-        self.cache.replace_lists(&lists)?;
-        self.emit(
-            "sync_progress",
-            json!({"stage":"lists","count":lists.len()}),
-        );
         self.progress("Downloading changed reminders...");
-        let (updated, deleted, new_cursor) = self
-            .client
-            .lock()
-            .await
-            .changes_since(Some(&cursor))
-            .await?;
+        let changes = self.client.lock().await.changes_since(Some(&cursor)).await?;
+        if changes.lists_changed {
+            self.progress("Refreshing changed lists...");
+            let lists = self.client.lock().await.lists().await?;
+            self.cache.replace_lists(&lists)?;
+        }
+        let updated = changes.updated;
+        let deleted = changes.deleted;
+        let new_cursor = changes.cursor;
         self.emit(
             "sync_progress",
             json!({"stage":"changes","total":updated.len()+deleted.len()}),
         );
         self.cache.upsert_reminders(&updated)?;
-        if !updated.is_empty() {
-            let ids = updated
-                .iter()
-                .map(|reminder| reminder.id.clone())
-                .collect::<Vec<_>>();
+        if changes.tags_changed {
+            let ids = self.cache.all_reminder_ids()?;
             self.progress("Downloading reminder tags...");
             let tags = self.client.lock().await.tags_for_reminders(&ids).await?;
-            for reminder in &updated {
+            for id in &ids {
                 self.cache.replace_tags_for(
-                    &reminder.id,
-                    tags.get(&reminder.id).map(Vec::as_slice).unwrap_or(&[]),
+                    id,
+                    tags.get(id).map(Vec::as_slice).unwrap_or(&[]),
                 )?;
             }
         }
@@ -261,13 +268,12 @@ impl SyncEngine {
     }
 
     async fn flush_outbox(&self) -> Result<Value> {
-        let Ok(_push_guard) = self.pushing.try_lock() else {
-            return Ok(json!({"pushed":0,"conflicts":0,"failed":0,"skipped":true}));
-        };
+
         let mut pushed = 0;
         let mut conflicts = 0;
-        let mut failed = 0;
-        for item in self.cache.pending(100)? {
+        let failed = 0;
+        for _ in 0..100 {
+            let Some(item) = self.cache.pending(1)?.into_iter().next() else { break; };
             let result = match item.op.as_str() {
                 "create" => self.client.lock().await.create(&item.payload).await,
                 "update" => {
@@ -294,10 +300,8 @@ impl SyncEngine {
                     if item.op == "create" {
                         self.cache.replace_id(&item.reminder_id, &remote.id)?;
                     }
-                    self.cache
-                        .clear_dirty(&remote.id, remote.change_tag.as_deref())?;
+                    self.cache.acknowledge_push(item.seq, &remote.id, remote.change_tag.as_deref())?;
                     self.cache.upsert_reminders(&[remote])?;
-                    self.cache.dequeue(item.seq)?;
                     pushed += 1;
                 }
                 Err(AppError::Conflict { detail, .. }) => {
@@ -318,20 +322,13 @@ impl SyncEngine {
                     self.emit("conflict", json!({"reminder_id":item.reminder_id}));
                 }
                 Err(error) => {
+                    eprintln!("sync: upload failed ({})", error.code());
                     self.cache.record_failure(item.seq, &error.to_string())?;
-                    failed += 1;
                     self.emit(
                         "push_failed",
                         json!({"reminder_id":item.reminder_id,"error":error.body()}),
                     );
-                    if matches!(
-                        error,
-                        AppError::AuthRequired { .. }
-                            | AppError::TwoFactorRequired { .. }
-                            | AppError::TermsRequired { .. }
-                    ) {
-                        return Err(error);
-                    }
+                    return Err(error);
                 }
             }
         }

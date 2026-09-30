@@ -424,6 +424,13 @@ impl Cache {
         Ok(())
     }
 
+    pub fn all_reminder_ids(&self) -> Result<Vec<String>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare("SELECT id FROM reminders WHERE deleted=0")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
     pub fn all_tags(&self) -> Result<Vec<Value>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare("SELECT name,COUNT(*) FROM tags t JOIN reminders r ON r.id=t.reminder_id WHERE r.deleted=0 AND r.completed=0 GROUP BY name ORDER BY name")?;
@@ -543,6 +550,17 @@ impl Cache {
             .map_err(Into::into)
     }
 
+    /// Acknowledge only this upload; edits queued during the request stay dirty.
+    pub fn acknowledge_push(&self, seq: i64, id: &str, tag: Option<&str>) -> Result<()> {
+        let mut conn = self.conn()?;
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM outbox WHERE seq=?1", [seq])?;
+        tx.execute("UPDATE outbox SET base_tag=?1 WHERE reminder_id=?2 AND seq>?3", params![tag, id, seq])?;
+        tx.execute("UPDATE reminders SET change_tag=?1,dirty=EXISTS(SELECT 1 FROM outbox WHERE reminder_id=?2) WHERE id=?2", params![tag,id])?;
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn dequeue(&self, seq: i64) -> Result<()> {
         self.conn()?
             .execute("DELETE FROM outbox WHERE seq=?1", [seq])?;
@@ -632,6 +650,26 @@ mod tests {
             title: title.into(),
             ..Reminder::default()
         }
+    }
+
+    #[test]
+    fn acknowledging_an_upload_preserves_newer_edits_and_rebases_the_queue() {
+        let (_dir, cache) = cache();
+        cache.insert_local_reminder(&Reminder { id:"r".into(), title:"Original".into(), ..Default::default() }).unwrap();
+        cache.enqueue("r", "update", &json!({"completed":1}), Some("old")).unwrap();
+        let first = cache.pending(1).unwrap()[0].seq;
+        cache.enqueue("r", "update", &json!({"title":"Newer"}), Some("old")).unwrap();
+        cache.apply_local_edit("r", json!({"title":"Newer"}).as_object().unwrap()).unwrap();
+        cache.acknowledge_push(first, "r", Some("new")).unwrap();
+        let pending = cache.pending(10).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].base_tag.as_deref(), Some("new"));
+        cache.upsert_reminders(&[Reminder { id:"r".into(), title:"Old response".into(), ..Default::default() }]).unwrap();
+        let current = cache.reminder("r").unwrap().unwrap();
+        assert_eq!(current.title, "Newer");
+        assert_eq!(current.dirty, 1);
+        cache.acknowledge_push(pending[0].seq, "r", Some("final")).unwrap();
+        assert_eq!(cache.reminder("r").unwrap().unwrap().dirty, 0);
     }
 
     #[test]
