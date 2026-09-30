@@ -12,7 +12,7 @@
                   PaneDisplayMode="LeftCompact" IsPaneOpen="True" OpenPaneLength="260" CompactPaneLength="48"
                   IsSettingsVisible="True" IsPaneToggleButtonVisible="True" AlwaysShowHeader="False"
                   PaneOpening="Navigation_PaneOpening" PaneClosing="Navigation_PaneClosing"
-                  SelectionChanged="Navigation_SelectionChanged">
+                  ItemInvoked="Navigation_ItemInvoked" SelectionChanged="Navigation_SelectionChanged">
    <NavigationView.MenuItems>
     <NavigationViewItem Content="Today" Tag="smart:today"><NavigationViewItem.Icon><FontIcon Glyph="&#xE823;"/></NavigationViewItem.Icon></NavigationViewItem>
     <NavigationViewItem Content="Upcoming" Tag="smart:upcoming"><NavigationViewItem.Icon><FontIcon Glyph="&#xE787;"/></NavigationViewItem.Icon></NavigationViewItem>
@@ -23,8 +23,8 @@
     <NavigationViewItemHeader Content="My lists"/>
    </NavigationView.MenuItems>
    <NavigationView.FooterMenuItems>
-    <NavigationViewItem x:Name="ConflictItem" Content="Sync conflicts" Tag="conflicts" Visibility="Collapsed"><NavigationViewItem.Icon><FontIcon Glyph="&#xE814;"/></NavigationViewItem.Icon></NavigationViewItem>
-    <NavigationViewItem Content="Sync now" Tag="sync"><NavigationViewItem.Icon><FontIcon Glyph="&#xE895;"/></NavigationViewItem.Icon></NavigationViewItem>
+    <NavigationViewItem x:Name="ConflictItem" SelectsOnInvoked="False" Content="Sync conflicts" Tag="conflicts" Visibility="Collapsed"><NavigationViewItem.Icon><FontIcon Glyph="&#xE814;"/></NavigationViewItem.Icon></NavigationViewItem>
+    <NavigationViewItem SelectsOnInvoked="False" Content="Sync now" Tag="sync"><NavigationViewItem.Icon><FontIcon Glyph="&#xE895;"/></NavigationViewItem.Icon></NavigationViewItem>
    </NavigationView.FooterMenuItems>
    <Grid>
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
@@ -45,7 +45,7 @@
        <ListView.ItemContainerTransitions><TransitionCollection><AddDeleteThemeTransition/><ReorderThemeTransition/></TransitionCollection></ListView.ItemContainerTransitions>
        <ListView.ItemTemplate><DataTemplate x:DataType="local:ReminderItem"><Grid Padding="10,10"><Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition/></Grid.ColumnDefinitions>
         <CheckBox IsChecked="{x:Bind Completed, Mode=TwoWay}" Click="Complete_Click" VerticalAlignment="Top" AutomationProperties.Name="Mark reminder complete"/>
-        <StackPanel Grid.Column="1" Spacing="3"><TextBlock Text="{x:Bind DisplayTitle, Mode=OneWay}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis"/><TextBlock Text="{x:Bind Metadata, Mode=OneWay}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Style="{ThemeResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis"/><TextBlock Text="{x:Bind Description, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{ThemeResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis"/></StackPanel>
+        <StackPanel Grid.Column="1" Spacing="3"><TextBlock Text="{x:Bind DisplayTitle, Mode=OneWay}" Style="{ThemeResource BodyStrongTextBlockStyle}" TextTrimming="CharacterEllipsis"/><TextBlock Text="{x:Bind Metadata, Mode=OneWay}" Foreground="{x:Bind MetadataBrush, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis"/><TextBlock Text="{x:Bind Description, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{ThemeResource CaptionTextBlockStyle}" TextTrimming="CharacterEllipsis"/></StackPanel>
        </Grid></DataTemplate></ListView.ItemTemplate>
       </ListView>
       <Grid x:Name="EmptyState" Grid.Row="2" Visibility="Collapsed" IsHitTestVisible="False"><StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"><FontIcon Glyph="&#xE90C;" FontSize="32" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/><TextBlock Text="Nothing here" Style="{ThemeResource SubtitleTextBlockStyle}" HorizontalAlignment="Center"/><TextBlock Text="Enjoy the quiet—or add a reminder." Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></Grid>

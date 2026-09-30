@@ -31,6 +31,11 @@ public sealed class ReminderItem : INotifyPropertyChanged
     [JsonPropertyName("dirty")] public long Dirty { get; set; }
 
     [JsonIgnore] public string DisplayTitle => string.IsNullOrWhiteSpace(Title) ? "Untitled reminder" : Title;
+    [JsonIgnore] public bool IsOverdue => !Completed && !Deleted && DateTimeOffset.TryParse(DueDate, out var due)
+        && (AllDay ? due.LocalDateTime.Date < DateTime.Today : due < DateTimeOffset.Now);
+    [JsonIgnore] public Microsoft.UI.Xaml.Media.Brush MetadataBrush => IsOverdue
+        ? (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["SystemFillColorCriticalBrush"]
+        : (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["AccentTextFillColorPrimaryBrush"];
     [JsonIgnore] public string DueText
     {
         get
@@ -48,6 +53,7 @@ public sealed class ReminderItem : INotifyPropertyChanged
         get
         {
             var parts = new List<string>();
+            if (IsOverdue) parts.Add("Overdue");
             if (DueText.Length > 0) parts.Add(DueText);
             if (Priority is 1 or 5 or 9) parts.Add(Priority switch { 1 => "High priority", 5 => "Medium priority", _ => "Low priority" });
             if (Tags.Count > 0) parts.Add(string.Join("  ", Tags.Select(t => "#" + t)));
@@ -55,11 +61,17 @@ public sealed class ReminderItem : INotifyPropertyChanged
             return string.Join("  ·  ", parts);
         }
     }
+    public void RefreshTimeMetadata()
+    {
+        PropertyChanged?.Invoke(this, new(nameof(Metadata)));
+        PropertyChanged?.Invoke(this, new(nameof(MetadataBrush)));
+    }
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return;
         field = value; PropertyChanged?.Invoke(this, new(name)); PropertyChanged?.Invoke(this, new(nameof(DisplayTitle)));
+        PropertyChanged?.Invoke(this, new(nameof(Metadata))); PropertyChanged?.Invoke(this, new(nameof(MetadataBrush)));
     }
 }
 
