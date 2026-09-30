@@ -1,0 +1,5 @@
+# Only used by CI policy tests, not the native application.
+# Wheels for CI's Linux CPython 3.12 and the Windows development Python 3.14.
+PyYAML==6.0.3 \
+    --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc \
+    --hash=sha256:4a2e8cebe2ff6ab7d1050ecd59c25d4c8bd7e6f400f5f82b96557ac0abafd0ac
