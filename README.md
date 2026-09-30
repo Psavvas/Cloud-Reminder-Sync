@@ -11,7 +11,8 @@
 Apple does not ship Reminders for Windows. This project provides a fast,
 offline-capable Windows client with background sync and due-date notifications.
 The interface is C# and WinUI 3 with no embedded browser or web frontend.
-Node.js and npm are not required.
+Python, Node.js and npm are not required. Authentication and iCloud communication
+run in the bundled native Rust connector.
 
 > This independent project is not authorized, sponsored, endorsed, or otherwise
 > approved by Apple Inc. It uses private, undocumented iCloud interfaces that
@@ -98,7 +99,8 @@ getting-started guide for signing and Store identity options.
 | Smart lists | Today, Upcoming, All, Completed and Deleted |
 | Search and sorting | Local SQLite queries; the network is not on the click path |
 | Tags | Read and filter only (an upstream iCloud limitation) |
-| Offline use | Full reads; edits queue and push after reconnecting |
+| Offline use | Full reads; edits queue for the next successful sync |
+| Automatic sync | After local edits, on launch/return, and every 10 minutes by default |
 | Authentication | Apple ID, 2FA by text message, terms acceptance and session restoration |
 | Conflicts | Preserved and explicitly resolved instead of overwritten |
 | Windows integration | Native theme, controls, badges and due notifications |
@@ -113,6 +115,36 @@ Two-factor sign-in uses a texted code. Apple verifies the code shown in a
 trusted-device prompt through an HSA2 websocket bridge that this connector does
 not implement yet, so an account with no trusted phone number cannot currently
 finish signing in -- see the protocol findings for what porting it involves.
+
+## Sync behavior and troubleshooting
+
+Changes made in Windows are saved locally and immediately queued for upload.
+Sync also runs when you launch the app, when you return to its window (with a
+30-second throttle), and every **10 minutes** by default while the app is
+running. The interval is configurable in Settings. Changes made on an iPhone
+arrive on the next sync; use **Sync now** to check immediately.
+
+After the initial download, routine sync fetches changes since the saved iCloud
+cursor. Lists and tags are refreshed when their records change, avoiding a full
+collection download on every check. Edits made during a sync receive a follow-up
+upload pass, and newer queued edits are preserved when an earlier upload finishes.
+
+The native connector reads and writes Apple's compressed title and notes
+documents. Completion updates include a completion timestamp and Apple's
+field-level merge metadata so other Apple clients can apply them. Deleted list
+records are excluded from navigation. Protocol upgrades that require rebuilding
+cached data trigger a fresh download automatically.
+
+The sync banner shows the current stage, including uploads, list downloads, and
+changed reminders. Upload failures and conflicts are surfaced in the app;
+failed uploads remain queued. Sync has request and pagination limits and a
+10-minute timeout per pass so a stalled request does not leave it running forever.
+
+For debugging, inspect `%LOCALAPPDATA%\RemindersSync\logs\app.log`. Sync
+request diagnostics include the operation, HTTP status, response size, page
+counts, and elapsed time without logging reminder text or session tokens in those
+request entries. Include the app version and the relevant sync error when
+reporting a problem; review logs before sharing them.
 
 ## Architecture
 
