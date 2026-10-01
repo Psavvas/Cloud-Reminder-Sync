@@ -215,8 +215,16 @@ public sealed partial class MainWindow
             Heading("My lists");
             panel.Children.Add(new TextBlock { Text = "Right-click a list in the sidebar to change its icon and color or move it up and down. These preferences stay on this PC.", TextWrapping = TextWrapping.Wrap });
             var dialog = MakeDialog("Settings", panel, "Save");
+            Heading("App updates");
+            panel.Children.Add(new TextBlock { Text = $"Version {AppUpdater.CurrentVersion.ToString(3)}" });
+            var checkUpdates = new Button { Content = "Check for updates", IsEnabled = !_demo && !_updateBusy };
+            var requestedUpdateCheck = false;
+            checkUpdates.Click += (_, _) => { requestedUpdateCheck = true; dialog.Hide(); };
+            panel.Children.Add(checkUpdates);
             sync.ValueChanged += (_, _) => dialog.IsPrimaryButtonEnabled = double.IsFinite(sync.Value) && sync.Value >= 5 && sync.Value <= 60;
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            var settingsResult = await dialog.ShowAsync();
+            if (requestedUpdateCheck) { await CheckForUpdatesAsync(true); return; }
+            if (settingsResult != ContentDialogResult.Primary) return;
             if (!double.IsFinite(sync.Value)) { ShowInfo("Settings weren't saved", "Enter a sync interval from 5 to 60 minutes.", InfoBarSeverity.Warning); return; }
             themeValue = theme.SelectedIndex switch { 1 => "light", 2 => "dark", _ => "system" };
             var values = new { theme = themeValue, sync_minutes = (int)Math.Clamp(sync.Value, 5, 60), notifications_enabled = notifications.IsOn, default_list_id = defaultList.SelectedValue as string };

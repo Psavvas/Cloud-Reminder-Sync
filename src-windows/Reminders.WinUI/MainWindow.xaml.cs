@@ -16,7 +16,7 @@ namespace Reminders.Windows;
 
 public sealed partial class MainWindow : Window
 {
-    private readonly SidecarClient _sidecar = new();
+    private SidecarClient _sidecar = new();
     private readonly ObservableCollection<ReminderItem> _reminders = [];
     private readonly DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(15) };
@@ -45,6 +45,12 @@ public sealed partial class MainWindow : Window
     private bool _hoverExpanded;
     private bool? _temporaryPaneTarget;
     private bool _initializingPane = true;
+    private readonly AppUpdater _updater = new();
+    private readonly CancellationTokenSource _updateLifetime = new();
+    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(6) };
+    private AppUpdate? _availableUpdate;
+    private bool _updateBusy;
+    private bool _sidecarDisposedForUpdate;
 
     public MainWindow()
     {
@@ -61,10 +67,10 @@ public sealed partial class MainWindow : Window
         _statusTimer.Tick += async (_, _) => { foreach (var reminder in _reminders) reminder.RefreshTimeMetadata(); await RefreshStatusAsync(); };
         _notificationTimer.Tick += async (_, _) => await CheckNotificationsAsync();
         _syncTimer.Tick += async (_, _) => await BackgroundSyncAsync();
+        _updateTimer.Tick += async (_, _) => await CheckForUpdatesAsync(false);
         _paneHoverOpenTimer.Tick += (_, _) => OpenPaneForHover();
         _paneHoverCloseTimer.Tick += (_, _) => CloseHoverPane();
-        _sidecar.EventReceived += Sidecar_EventReceived;
-        _sidecar.Stopped += (_, reason) => DispatcherQueue.TryEnqueue(() => ShowInfo("Sync service stopped", reason, InfoBarSeverity.Error));
+        AttachSidecarEvents();
         SetWindowSize();
         _panePinnedOpen = UiPreferences.LoadNavigationPaneOpen();
         Navigation.IsPaneOpen = _panePinnedOpen;
@@ -86,6 +92,7 @@ public sealed partial class MainWindow : Window
 
     private async void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
     {
+        if (_sidecarDisposedForUpdate) return;
         if (args.WindowActivationState == WindowActivationState.Deactivated) return;
         if (_bootStarted)
         {
@@ -100,6 +107,8 @@ public sealed partial class MainWindow : Window
             return;
         }
         await BootAsync();
+        _updateTimer.Start();
+        await CheckForUpdatesAsync(false);
     }
 
     private async Task BootAsync()
@@ -565,10 +574,92 @@ public sealed partial class MainWindow : Window
         await RefreshAllAsync();
     }
     private void ApplyTheme(string theme) => Root.RequestedTheme = theme switch { "dark" => ElementTheme.Dark, "light" => ElementTheme.Light, _ => ElementTheme.Default };
+
+    private async Task CheckForUpdatesAsync(bool manual)
+    {
+        if (_demo || _updateBusy || _updateLifetime.IsCancellationRequested) return;
+        // Portable and development launches only contact GitHub on an explicit check.
+        if (!manual && !AppUpdater.CanInstall) return;
+        _updateBusy = true;
+        try
+        {
+            _availableUpdate = await _updater.CheckAsync(_updateLifetime.Token);
+            if (_updateLifetime.IsCancellationRequested) return;
+            if (_availableUpdate is null)
+            {
+                UpdateInfoBar.IsOpen = false;
+                if (manual) { UpdateInfoBar.Title = "You're up to date"; UpdateInfoBar.Message = "No newer stable release is available."; UpdateInfoBar.IsOpen = true; UpdateButton.Visibility = Visibility.Collapsed; }
+                return;
+            }
+            UpdateInfoBar.Title = $"Reminders {_availableUpdate.Version} is available";
+            UpdateInfoBar.Message = AppUpdater.CanInstall ? "Install the update and restart when you're ready. Your reminders and sign-in will be kept." : "Download the new release from GitHub for this portable or packaged build.";
+            UpdateButton.Content = AppUpdater.CanInstall ? "Install and restart" : "Open releases";
+            UpdateButton.Visibility = Visibility.Visible;
+            UpdateInfoBar.IsOpen = true;
+        }
+        catch (OperationCanceledException) when (_updateLifetime.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            AppLog.Error("Could not check for updates", error);
+            if (manual) { UpdateInfoBar.Title = "Could not check for updates"; UpdateInfoBar.Message = error.Message; UpdateInfoBar.IsOpen = true; UpdateButton.Visibility = Visibility.Collapsed; }
+        }
+        finally { _updateBusy = false; }
+    }
+
+    private async void Update_Click(object sender, RoutedEventArgs args)
+    {
+        if (_updateBusy || _dialogOpen || _availableUpdate is null) return;
+        if (!AppUpdater.CanInstall)
+        {
+            await global::Windows.System.Launcher.LaunchUriAsync(new Uri($"https://github.com/{AppUpdater.Repository}/releases/latest"));
+            return;
+        }
+        _updateBusy = true;
+        _dialogOpen = true;
+        UpdateButton.IsEnabled = false;
+        try
+        {
+            var confirmation = new ContentDialog { XamlRoot = Root.XamlRoot, Title = "Install update?", Content = "Reminders will close while the update installs, then reopen. Save any unfinished reminder edits first.", PrimaryButtonText = "Install and restart", CloseButtonText = "Later" };
+            if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
+            UpdateInfoBar.Title = "Downloading update";
+            // Progress<T> does not rely on a WinUI SynchronizationContext.
+            var progress = new Progress<double>(percent => DispatcherQueue.TryEnqueue(() => UpdateInfoBar.Message = $"{percent:F0}% downloaded"));
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_updateLifetime.Token);
+            timeout.CancelAfter(TimeSpan.FromMinutes(15));
+            var installer = await _updater.DownloadAsync(_availableUpdate, progress, timeout.Token);
+            _updateLifetime.Token.ThrowIfCancellationRequested();
+            Navigation.IsEnabled = false;
+            _statusTimer.Stop(); _notificationTimer.Stop(); _syncTimer.Stop();
+            _sidecarDisposedForUpdate = true;
+            await _sidecar.DisposeAsync();
+            _updateLifetime.Token.ThrowIfCancellationRequested();
+            AppUpdater.LaunchInstaller(installer);
+            Close();
+        }
+        catch (OperationCanceledException) when (_updateLifetime.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            AppLog.Error("Could not install update", error);
+            UpdateInfoBar.Title = "Could not install update"; UpdateInfoBar.Message = error.Message;
+            if (_sidecarDisposedForUpdate)
+            {
+                _sidecar = new SidecarClient(); AttachSidecarEvents();
+                _sidecarDisposedForUpdate = false; await BootAsync();
+            }
+        }
+        finally { _updateBusy = false; _dialogOpen = false; UpdateButton.IsEnabled = true; Navigation.IsEnabled = true; }
+    }
+
+    private void AttachSidecarEvents()
+    {
+        _sidecar.EventReceived += Sidecar_EventReceived;
+        _sidecar.Stopped += (_, reason) => DispatcherQueue.TryEnqueue(() => ShowInfo("Sync service stopped", reason, InfoBarSeverity.Error));
+    }
     private void ShowInfo(string title, string message, InfoBarSeverity severity) { AppInfoBar.Title = title; AppInfoBar.Message = message; AppInfoBar.Severity = severity; AppInfoBar.IsOpen = true; }
 
     private void Sidecar_EventReceived(object? sender, SidecarEventArgs e) => DispatcherQueue.TryEnqueue(async () =>
     {
+        if (_sidecarDisposedForUpdate || _updateLifetime.IsCancellationRequested) return;
         switch (e.Name)
         {
             case "ready": await BootAsync(); break;
@@ -597,7 +688,8 @@ public sealed partial class MainWindow : Window
     private async void MainWindow_Closed(object sender, WindowEventArgs args)
     {
         _statusTimer.Stop(); _notificationTimer.Stop(); _syncTimer.Stop(); _paneHoverOpenTimer.Stop(); _paneHoverCloseTimer.Stop();
+        _updateTimer.Stop(); _updateLifetime.Cancel();
         if (_notificationsRegistered) { try { AppNotificationManager.Default.Unregister(); } catch { } }
-        await _sidecar.DisposeAsync();
+        if (!_sidecarDisposedForUpdate) await _sidecar.DisposeAsync();
     }
 }

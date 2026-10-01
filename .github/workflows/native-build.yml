@@ -171,6 +171,9 @@ jobs:
       - name: Build and publish native app
         run: .\scripts\build-windows.ps1 -Configuration Release -Architecture ${{ matrix.architecture }} -SkipSidecar -LockedRestore
 
+      - name: Test update release selection and download verification
+        run: dotnet run --project src-windows/AppUpdater.Tests/AppUpdater.Tests.csproj -c Release
+
       - name: Save NuGet packages from main
         if: inputs.save-cache && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.nuget.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
