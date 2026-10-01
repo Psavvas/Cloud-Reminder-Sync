@@ -101,7 +101,7 @@ Filename: "{app}\Reminders.exe"; Description: "{cm:LaunchProgram,Reminders for W
 Filename: "{app}\Reminders.exe"; Flags: nowait; Check: IsAppUpdate
 
 [INI]
-Filename: "{app}\installer-installation.txt"; Section: "Installation"; Key: "Type"; String: "InnoSetup"; Flags: uninsdeleteentry uninsdeletesectionifempty uninsdeletefileifempty
+Filename: "{app}\installer-installation.txt"; Section: "Installation"; Key: "Type"; String: "InnoSetup"; Flags: uninsdeleteentry uninsdeletesectionifempty
 
 [Code]
 function IsAppUpdate: Boolean;
@@ -115,6 +115,7 @@ begin
 end;
 
 [UninstallDelete]
+Type: files; Name: "{app}\installer-installation.txt"
 ; Log files the app writes next to its data. Reminder content, settings and the
 ; sync cache are deliberately left in place so reinstalling does not lose them;
 ; credentials live in Windows Credential Manager and are never touched here.
