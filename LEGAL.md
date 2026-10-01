@@ -32,13 +32,11 @@ Apple's current iCloud terms and trademark guidance are available at:
 
 ## Licensing and warranty
 
-This notice is not a software license and does not grant permission to copy,
-modify, or distribute the repository. The repository currently has no root
-license file; a license should be selected by the relevant rights holders
-before third-party redistribution. The removed `license = "MIT"` crate field
-was package metadata, not a substitute for a license grant.
+This repository is licensed under the MIT License. See the root `LICENSE` file
+for the full text of the license and its terms.
 
-The software is experimental and no warranty is offered by the maintainers.
-This notice is general project information, not legal advice or a determination
-that a particular use is lawful. Consult qualified counsel for advice about a
-specific distribution or use case.
+The software is experimental and no warranty is offered by the maintainers
+beyond what is expressly stated in the license. This notice is general project
+information, not legal advice or a determination that a particular use is
+lawful. Consult qualified counsel for advice about a specific distribution or
+use case.
