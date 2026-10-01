@@ -28,7 +28,12 @@
    </NavigationView.FooterMenuItems>
    <Grid>
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
-    <InfoBar x:Name="AppInfoBar" Grid.Row="0" IsOpen="False" IsClosable="True" Margin="12,8,12,0"/>
+    <StackPanel Grid.Row="0">
+     <InfoBar x:Name="UpdateInfoBar" IsOpen="False" IsClosable="True" Severity="Informational" Margin="12,8,12,0">
+      <InfoBar.ActionButton><Button x:Name="UpdateButton" Content="Install and restart" Click="Update_Click"/></InfoBar.ActionButton>
+     </InfoBar>
+     <InfoBar x:Name="AppInfoBar" IsOpen="False" IsClosable="True" Margin="12,8,12,0"/>
+    </StackPanel>
     <Grid Grid.Row="1">
      <Grid.ColumnDefinitions><ColumnDefinition Width="460"/><ColumnDefinition Width="1"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
      <Grid Background="{ThemeResource LayerFillColorDefaultBrush}">

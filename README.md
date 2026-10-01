@@ -90,6 +90,25 @@ thumbprint is provided — but an unsigned installer still installs after a
 SmartScreen prompt, whereas Windows refuses an unsigned MSIX outright. See the
 getting-started guide for signing and Store identity options.
 
+## App updates
+
+Installer builds check GitHub for updates on launch and every six hours while
+running. A banner offers **Install and restart** when a newer stable release is
+available. You can also use **Settings → Check for updates**. The app downloads
+the matching x64 or ARM64 installer, checks its size and GitHub SHA-256 digest,
+then upgrades the existing installation and reopens. Reminder data, queued
+changes, preferences and sign-in credentials are kept. Save unfinished edits
+before restarting. Failed checks never prevent normal app use.
+
+Install a build containing the updater once to enable it. Portable, development
+and MSIX builds offer a link to the release instead of running an installer.
+
+To ship an update, increase `<Version>` in the WinUI project and `version` in
+`sidecar/Cargo.toml` together, commit the changes, and push a matching tag (for
+example `v0.4.0`). CI creates a draft with both installers. Review and publish
+that draft as a stable GitHub release; drafts and prereleases are ignored by
+the updater. Committing code alone does not distribute an update.
+
 ## What works
 
 | Feature | Support |
@@ -172,6 +191,7 @@ boundary and native control architecture.
 
 ```powershell
 cargo test --manifest-path .\sidecar\Cargo.toml --locked
+dotnet run --project .\src-windows\AppUpdater.Tests\AppUpdater.Tests.csproj -c Release
 dotnet build .\src-windows\Reminders.WinUI\Reminders.WinUI.csproj -c Release -p:Platform=x64
 ```
 
