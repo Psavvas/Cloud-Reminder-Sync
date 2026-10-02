@@ -26,11 +26,6 @@
     <NavigationViewItem x:Name="ConflictItem" SelectsOnInvoked="False" Content="Sync conflicts" Tag="conflicts" Visibility="Collapsed"><NavigationViewItem.Icon><FontIcon Glyph="&#xE814;"/></NavigationViewItem.Icon></NavigationViewItem>
     <NavigationViewItem SelectsOnInvoked="False" Content="Sync now" Tag="sync"><NavigationViewItem.Icon><FontIcon Glyph="&#xE895;"/></NavigationViewItem.Icon></NavigationViewItem>
    </NavigationView.FooterMenuItems>
-   <NavigationView.PaneFooter>
-    <ToggleButton x:Name="SidebarPinButton" HorizontalAlignment="Stretch" Margin="4" Padding="10,8" Click="SidebarPin_Click" AutomationProperties.Name="Pin sidebar open" ToolTipService.ToolTip="Pin sidebar open">
-     <StackPanel Orientation="Horizontal" Spacing="12"><SymbolIcon x:Name="SidebarPinIcon" Symbol="Pin"/><TextBlock x:Name="SidebarPinLabel" Text="Pin sidebar open" VerticalAlignment="Center"/></StackPanel>
-    </ToggleButton>
-   </NavigationView.PaneFooter>
    <Grid>
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
     <StackPanel Grid.Row="0">
@@ -78,6 +73,13 @@
     </Grid>
    </Grid>
   </NavigationView>
+  <!-- Keep the pin in the sidebar's title row without adding a menu row.
+       The transparent host lets pointer events reach the navigation beneath. -->
+  <Grid x:Name="SidebarPinHeader" Width="{x:Bind Navigation.OpenPaneLength}" Height="48" HorizontalAlignment="Left" VerticalAlignment="Top">
+   <ToggleButton x:Name="SidebarPinButton" Width="28" Height="28" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0" Padding="5" Background="Transparent" BorderThickness="0" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Click="SidebarPin_Click" PointerEntered="NavigationPaneItem_PointerEntered" PointerExited="NavigationPaneItem_PointerExited" AutomationProperties.Name="Pin sidebar open" ToolTipService.ToolTip="Pin sidebar open">
+    <FontIcon Glyph="&#xE718;" FontSize="14"/>
+   </ToggleButton>
+  </Grid>
 
   <Grid x:Name="AuthGate" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="36" Width="430" HorizontalAlignment="Center" VerticalAlignment="Center">

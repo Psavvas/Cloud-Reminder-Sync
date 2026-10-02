@@ -427,7 +427,7 @@ public sealed partial class MainWindow : Window
 
     private void Navigation_PaneOpening(NavigationView sender, object args)
     {
-        SidebarPinLabel.Visibility = Visibility.Visible;
+        SidebarPinHeader.Visibility = Visibility.Visible;
         if (_initializingPane) return;
         if (_temporaryPaneTarget is true) { _temporaryPaneTarget = null; return; }
         if (!_panePinnedOpen) _hoverExpanded = true;
@@ -439,7 +439,7 @@ public sealed partial class MainWindow : Window
         // A delayed light-dismiss from the compact view can arrive after the
         // pin action. It must not undo the user's explicit choice.
         if (_panePinnedOpen) { args.Cancel = true; return; }
-        SidebarPinLabel.Visibility = Visibility.Collapsed;
+        SidebarPinHeader.Visibility = Visibility.Collapsed;
         if (_temporaryPaneTarget is false) { _temporaryPaneTarget = null; _hoverExpanded = false; return; }
         _hoverExpanded = false;
     }
@@ -464,9 +464,7 @@ public sealed partial class MainWindow : Window
         finally { _initializingPane = wasInitializing; }
         var action = pinned ? "Unpin sidebar" : "Pin sidebar open";
         SidebarPinButton.IsChecked = pinned;
-        SidebarPinLabel.Text = action;
-        SidebarPinLabel.Visibility = pinned ? Visibility.Visible : Visibility.Collapsed;
-        SidebarPinIcon.Symbol = pinned ? Symbol.UnPin : Symbol.Pin;
+        SidebarPinHeader.Visibility = pinned ? Visibility.Visible : Visibility.Collapsed;
         ToolTipService.SetToolTip(SidebarPinButton, action);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SidebarPinButton, action);
         if (persist && !_demo) UiPreferences.SaveNavigationPaneOpen(pinned);
