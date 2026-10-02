@@ -30,14 +30,6 @@ if ($Demo) {
     exit 0
 }
 
-Test-Command 'Rust' 'cargo'
-
-$rustTarget = if ($Architecture -eq 'ARM64') { 'aarch64-pc-windows-msvc' } else { 'x86_64-pc-windows-msvc' }
-$rustup = Get-Command rustup -ErrorAction SilentlyContinue
-$installedTargets = if ($rustup) { @(& rustup target list --installed) } else { @() }
-if ($installedTargets -contains $rustTarget) { Write-Host "  [ok]      Rust target - $rustTarget" -ForegroundColor Green }
-else { Write-Host "  [missing] Rust target - $rustTarget" -ForegroundColor Red; $problems.Add("Rust target $rustTarget") }
-
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 if (Test-Path $vswhere) {
     $visualStudio = & $vswhere -latest -products * -property installationPath
@@ -47,11 +39,6 @@ if (Test-Path $vswhere) {
     Write-Host '  [missing] Visual Studio / MSVC discovery' -ForegroundColor Red
     $problems.Add('Visual Studio')
 }
-
-$linkArchitecture = if ($Architecture -eq 'ARM64') { 'arm64' } else { 'x64' }
-$link = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\bin\Hostx64\$linkArchitecture\link.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($link) { Write-Host "  [ok]      MSVC linker - $($link.FullName)" -ForegroundColor Green }
-else { Write-Host "  [missing] MSVC $Architecture linker" -ForegroundColor Red; $problems.Add("MSVC $Architecture linker") }
 
 if ($Msix) {
     $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'

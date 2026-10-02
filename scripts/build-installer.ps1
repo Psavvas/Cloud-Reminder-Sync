@@ -40,7 +40,7 @@ if (-not $SkipBuild) {
     & (Join-Path $PSScriptRoot 'build-windows.ps1') -Architecture $Architecture
     if ($LASTEXITCODE -ne 0) { throw "The $Architecture production build failed." }
 }
-foreach ($required in @('Reminders.exe', 'reminders-sidecar.exe')) {
+foreach ($required in @('Reminders.exe', 'Reminders.Core.dll')) {
     if (-not (Test-Path -LiteralPath (Join-Path $portableOutput $required))) {
         throw "$required is missing from $portableOutput. Run .\scripts\build-windows.ps1 -Architecture $Architecture first."
     }
@@ -60,7 +60,7 @@ if (-not $iscc) {
 }
 
 # The csproj version is the single source of truth; CI checks it against the
-# sidecar's Cargo.toml version on every build.
+# MSIX manifest version on every build.
 [xml]$projectXml = Get-Content -Raw $project
 $version = ($projectXml.Project.PropertyGroup.Version | Where-Object { $_ }).ToString().Trim()
 if (-not $version) { throw 'Could not read <Version> from the WinUI project.' }

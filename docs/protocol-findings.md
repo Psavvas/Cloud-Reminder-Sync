@@ -1,7 +1,7 @@
 # iCloud Reminders protocol findings
 
 These observations came from the repository's original live-account probes and
-define the behavior the native Rust connector must preserve.
+define the behavior the native C# connector must preserve.
 
 - Reminders use the private `com.apple.reminders` CloudKit container and the
   `Reminders` custom zone. The API is undocumented and may change.
@@ -102,48 +102,22 @@ define the behavior the native Rust connector must preserve.
   typing.
 - Rebuilding the session re-runs SRP and voids any outstanding challenge. The
   background sync must not do that while a code is in flight.
-- The exact statuses Apple returns here are undocumented and were guessed wrong
-  once already. The sidecar logs them (`2fa: ... returned HTTP ...`) to stderr,
-  which the app captures into
-  `%LOCALAPPDATA%\RemindersSync\logs\app.log` -- read that before theorising.
+- The exact statuses Apple returns here are undocumented. Verify behavior with
+  account-free HTTP mocks and a disposable account before changing classifications.
 
 The authentication and record formats need live Windows/account validation
 whenever Apple changes the private service. Tests must use a dedicated account
 and must never log passwords, verification codes, session tokens, record
 contents, or credential-vault values.
 
-## Checking a Windows-only crate from a Linux workspace
+## Account-free backend tests
 
-The sidecar's `main` and its credential vault are `#[cfg(windows)]`, so on any
-other platform the whole crate is unreachable and `dead_code` fires on all of
-it. The crate exempts that lint off-Windows to stay buildable.
-
-The consequence is that a Linux `cargo clippy` cannot see the lints CI enforces,
-because CI lints on Windows with `-D warnings`. An unused import in a test
-module reached CI that way.
-
-Two things keep it honest:
-
-- `unused_imports` is *not* exempted. Imports that only serve Windows-only code
-  carry their own `#[cfg(windows)]`.
-- The Windows target can be checked from Linux without MSVC by going through
-  mingw, which needs no Apple or Microsoft toolchain:
-
-  ```sh
-  apt-get install -y mingw-w64
-  rustup target add x86_64-pc-windows-gnu
-  cargo clippy --target x86_64-pc-windows-gnu --all-targets \
-      --manifest-path sidecar/Cargo.toml -- -D warnings
-  ```
-
-  This compiles the `cfg(windows)` paths and reports the `dead_code` CI would.
-  `x86_64-pc-windows-msvc` does *not* work here -- `ring`'s build script needs a
-  real MSVC toolchain. Verified to catch a deliberately unused method that the
-  Linux run passes over.
+The production C# backend uses Windows Credential Manager. Account-free tests
+inject a memory vault and mocked HTTP handlers.
 
 ## Authentication lifecycle regression checks
 
-The Rust connector prepares the challenge without requesting delivery. The
+The C# connector prepares the challenge without requesting delivery. The
 code-entry screen requests one SMS; only an explicit resend requests another.
 Verification and delivery controls are disabled together while either request
 is in flight. The previous priming step sent an untracked SMS before the UI
@@ -156,9 +130,9 @@ Session data stays in Windows Credential Manager; closing the window does not
 invoke sign-out. An explicit hsaChallengeRequired response is honored even when
 hsaTrustedBrowser is true.
 
-Local HTTP tests in sidecar/src/auth_flow_tests.rs cover the preparation,
-delivery, verification and trust sequence, rotated headers and cookies, token
-restoration, server outages and rejected or incomplete sessions. These checks
+Mocked HTTP tests in src-windows/Reminders.Core.Tests/Program.cs cover the preparation,
+delivery, verification and trust sequence, rotated headers, token restoration,
+response limits and malformed/rejected verification responses. These checks
 validate client behavior; a real Apple account must still confirm successful
 sign-in followed by closing and reopening the built application.
 

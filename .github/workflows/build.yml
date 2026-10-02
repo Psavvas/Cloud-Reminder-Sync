@@ -114,7 +114,7 @@ jobs:
 
             Prefer not to install? `Reminders-for-Windows-x64.zip` is the same
             application as a portable folder -- unzip it and run `Reminders.exe`.
-            Keep `Reminders.exe` and `reminders-sidecar.exe` together.
+            Keep the publish folder together, including `Reminders.Core.dll`.
 
             The `.msix` is for a future signed or Microsoft Store release.
             Windows will not install it while it is unsigned.

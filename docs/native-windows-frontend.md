@@ -8,23 +8,21 @@ shell is composed from Windows controls including `NavigationView`, `InfoBar`,
 No web frontend is built or shipped. The interface is implemented entirely with
 Windows UI controls and verified through Windows UI Automation.
 
-## Process boundary
+## Integrated C# backend
 
-The existing Rust binary remains the data and sync backend. It receives
-newline-delimited JSON requests over standard input and emits responses and
-events over standard output. The native client:
+Reminders.Core runs in the WinUI process. SyncClient makes asynchronous calls
+and forwards authentication, sync and conflict events onto the UI dispatcher.
+SQLite and authentication work run off the UI thread. The service cancels outstanding
+work before disposing its cache and HTTP client.
 
-- locates and starts `reminders-sidecar.exe` without a console window;
-- proves readiness with `ping` before showing cached data;
-- correlates concurrent calls by numeric request ID;
-- forwards sync, authentication and conflict events onto the WinUI dispatcher;
-- stores its data under `%LOCALAPPDATA%\RemindersSync`;
-- shuts the child down when the application exits.
+The SQLite schema and Windows Credential Manager target names remain compatible.
+There is no executable discovery, child process or JSON pipe. Unpackaged data is
+under %LOCALAPPDATA%\RemindersSync; Windows may virtualize it for an MSIX app.
 
 ## Demo mode
 
 `--demo` is a first-class, side-effect-free UI testing mode. It does not start
-the sidecar or access the real cache. Sample lists and reminders live only in
+the backend or access the real cache. Sample lists and reminders live only in
 memory. The sign-in screen exposes the same path through an **Explore the UI
 with sample data** button.
 

@@ -81,7 +81,13 @@ public sealed class ConflictItem
     [JsonPropertyName("reminder_id")] public string ReminderId { get; set; } = "";
 }
 
-public sealed class SidecarException(string code, string message, string detail = "") : Exception(message)
+public sealed class ReminderTag
+{
+    [JsonPropertyName("name")] public string Name { get; set; } = "";
+    [JsonPropertyName("n")] public long Count { get; set; }
+}
+
+public sealed class SyncException(string code, string message, string detail = "") : Exception(message)
 {
     public string Code { get; } = code;
     public string Detail { get; } = detail;

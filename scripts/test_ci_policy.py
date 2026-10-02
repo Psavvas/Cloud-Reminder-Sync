@@ -46,7 +46,7 @@ def validate(dispatcher, pipeline):
     assert download['with']['pattern'] == 'Reminders-for-Windows-*-${{ github.sha }}'
     assert not {'run-id', 'repository', 'github-token'} & download['with'].keys()
     assert pipeline['permissions'] == {'contents': 'read'}
-    assert set(pipeline['jobs']) == {'windows', 'rust-checks', 'audit'}
+    assert set(pipeline['jobs']) == {'windows', 'backend-checks', 'audit'}
     for job in pipeline['jobs'].values():
         assert job['permissions'] == {'contents': 'read'}
         assert 'cache-mode' not in job  # Must inherit the caller's cap.
@@ -56,13 +56,6 @@ def validate(dispatcher, pipeline):
                 assert re.fullmatch(r'[\w-]+/[\w/-]+@[0-9a-f]{40}', action), action
             if 'checkout@' in action:
                 assert step['with']['persist-credentials'] == 'false'
-            if 'rust-cache@' in action:
-                assert step['if'] == 'inputs.use-cache'
-                assert step['with']['prefix-key'] == 'ci-v1-rust'
-                assert step['with']['cache-bin'] == 'false'
-                assert 'inputs.save-cache' in step['with']['save-if']
-                assert "github.event_name == 'push'" in step['with']['save-if']
-                assert "github.ref == 'refs/heads/main'" in step['with']['save-if']
             if 'actions/cache/' in action:
                 assert step['with']['path'] == '.nuget/packages'
                 if '/save@' in action:
@@ -75,17 +68,8 @@ def validate(dispatcher, pipeline):
                     assert '${{ matrix.architecture }}' in step['with']['key']
                     assert 'packages.{0}.lock.json' in step['with']['key']
             assert '${{ github.' not in step.get('run', ''), 'Untrusted GitHub data embedded in executable script'
-    audit_steps = pipeline['jobs']['audit']['steps']
-    install = next(step['run'] for step in audit_steps if step.get('name') == 'Install verified cargo-audit')
-    assert install.index('sha256sum --check --strict') < install.index('tar -xzf')
-    assert 'cargo-audit/v0.22.2/' in install
-    assert '7fb9497f8594b389e5fce5ef9b92db08432996895b2e0c5a0167a69ed445c428' in install
-    assert not any('cache@' in step.get('uses', '') for step in audit_steps)
-    keys = [step['with']['key'] for job in pipeline['jobs'].values() for step in job['steps'] if 'rust-cache@' in step.get('uses', '')]
-    assert len(set(keys)) == 2 and any('${{ matrix.rust_target }}' in key for key in keys)
     publish = next(step['run'] for step in pipeline['jobs']['windows']['steps'] if step.get('name') == 'Build and publish native app')
     assert '-LockedRestore' in publish
-    assert '--release --locked --target' in (ROOT / 'scripts/build-sidecar.ps1').read_text()
 
 
 class CiPolicyTests(unittest.TestCase):

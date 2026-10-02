@@ -1,0 +1,202 @@
+using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+namespace Reminders.Core;
+
+/// <summary>In-process iCloud engine. Cache calls remain available during network operations.</summary>
+public sealed class ReminderService : IAsyncDisposable
+{
+    private readonly Cache cache;
+    private readonly ICloudClient client;
+    private readonly SyncEngine sync;
+    private readonly SemaphoreSlim clientGate = new(1, 1);
+    private readonly CancellationTokenSource lifetime = new();
+    private readonly ConcurrentDictionary<long, Task> background = new();
+    private readonly object workGate = new();
+    private long nextTask;
+    private JsonObject authSnapshot;
+    private bool disposed;
+    public event Action<string, JsonElement>? EventReceived;
+    public event Action<string>? Diagnostic;
+    public ReminderService(string dataDirectory) : this(dataDirectory, new WindowsSecrets()) { }
+    internal ReminderService(string dataDirectory, ISecrets secrets, Func<HttpMessageHandler>? handlerFactory = null)
+    {
+        cache = new Cache(Path.Combine(dataDirectory, "cache.db"));
+        client = new ICloudClient((cache.Meta("apple_id") ?? "").Trim().ToLowerInvariant(), new SecretStore(secrets), handlerFactory);
+        client.Diagnostic += message => Diagnostic?.Invoke(message);
+        authSnapshot = client.Status; sync = new(cache, client, clientGate, Emit);
+    }
+    private void Emit(string name, JsonNode data)
+    {
+        if (name == "sync_progress" && data.Text("message") is { } message) Diagnostic?.Invoke("sync: " + message);
+        if (name == "auth_changed" && data is JsonObject status) Volatile.Write(ref authSnapshot, (JsonObject)status.DeepClone());
+        // Subscribers cannot abort a sync by throwing from a UI event handler.
+        try { EventReceived?.Invoke(name, JsonSerializer.SerializeToElement(data)); } catch (Exception ex) { Diagnostic?.Invoke($"Event '{name}' failed: {ex.GetType().Name}"); }
+    }
+    private void Queue(Func<CancellationToken, Task> action)
+    {
+        lock (workGate)
+        {
+            if (disposed) return;
+            var id = Interlocked.Increment(ref nextTask);
+            var task = Task.Run(async () =>
+            {
+                try { await action(lifetime.Token); }
+                catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+                catch (CoreException ex) { Emit("sync_error", ex.Body); Diagnostic?.Invoke($"sync: {ex.Code}: {ex.Message}"); }
+                catch (Exception ex) { Emit("sync_error", new CoreException("ERROR", "The sync operation failed", ex.GetType().Name).Body); Diagnostic?.Invoke($"sync failed: {ex.GetType().Name}"); }
+            });
+            background[id] = task;
+            _ = task.ContinueWith(_ => background.TryRemove(id, out var ignored), TaskScheduler.Default);
+        }
+    }
+    public Task StartAsync(CancellationToken token = default)
+    {
+        token.ThrowIfCancellationRequested(); ObjectDisposedException.ThrowIf(disposed, this);
+        if (client.Account.Length > 0)
+        {
+            client.Restoring = true; authSnapshot = client.Status;
+            Queue(async ct =>
+            {
+                bool restored = false;
+                foreach (var delay in new[] { 0, 5, 15, 45, 120, 300 })
+                {
+                    if (delay > 0) await Task.Delay(TimeSpan.FromSeconds(delay), ct);
+                    restored = await WithClient(() => client.Restore(ct), ct);
+                    if (restored || !client.RestoreRetryable) break;
+                    client.Restoring = true; Volatile.Write(ref authSnapshot, client.Status);
+                }
+                client.Restoring = false; Emit("auth_changed", client.Status);
+                if (restored) await sync.Sync(cache.Lists.Count == 0, ct);
+            });
+        }
+        Emit("ready", J.Node(new { apple_id = client.Account })); return Task.CompletedTask;
+    }
+    private async Task<T> WithClient<T>(Func<Task<T>> action, CancellationToken token)
+    {
+        await clientGate.WaitAsync(token);
+        try { return await action(); }
+        finally { try { Volatile.Write(ref authSnapshot, client.Status); } finally { clientGate.Release(); } }
+    }
+    public async Task<JsonElement> CallAsync(string method, JsonElement parameters, CancellationToken cancellationToken = default)
+    {
+        Task<JsonElement> call; long id;
+        lock (workGate)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            id = Interlocked.Increment(ref nextTask);
+            call = CallCore(method, parameters, cancellationToken); background[id] = call;
+        }
+        try { return await call; } finally { background.TryRemove(id, out _); }
+    }
+    private async Task<JsonElement> CallCore(string method, JsonElement parameters, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lifetime.Token);
+        var p = parameters.ValueKind == JsonValueKind.Object ? JsonNode.Parse(parameters.GetRawText())!.AsObject() : new JsonObject();
+        var result = await Dispatch(method, p, linked.Token);
+        return JsonSerializer.SerializeToElement(result);
+    }
+    private async Task<JsonNode?> Dispatch(string method, JsonObject p, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        switch (method)
+        {
+            case "ping": return J.Node(new { pong = true });
+            case "auth_status":
+                var status = (JsonObject)Volatile.Read(ref authSnapshot).DeepClone(); status["has_cache"] = cache.Lists.Count > 0; status["last_sync"] = cache.Meta("last_sync"); return status;
+            case "login":
+                var account = (p.Optional("apple_id", 320) ?? cache.Meta("apple_id") ?? "").Trim().ToLowerInvariant(); if (account.Length == 0) throw new CoreException("AUTH_REQUIRED", "No Apple ID provided");
+                var password = p.Optional("password", 4096);
+                var login = await WithClient(async () =>
+                {
+                    // Mixing another account's cached reminders with a new session
+                    // would upload edits to the wrong CloudKit container.
+                    if (client.Account.Length > 0 && client.Account != account && cache.Pending(1).Count > 0) throw CoreException.Bad("Sync queued changes or sign out and clear the cache before switching accounts.");
+                    if (client.Account.Length > 0 && client.Account != account) cache.Purge();
+                    client.SetAccount(account); cache.SetMeta("apple_id", account);
+                    return await client.Connect(password, cache.Settings.Flag("remember_password"), p.Flag("accept_terms"), token);
+                }, token);
+                Queue(ct => sync.Sync(cache.Lists.Count == 0, ct)); return login;
+            case "request_2fa": return await WithClient(() => client.RequestCode(p.Text("method") == "sms", token), token);
+            case "submit_2fa":
+                var code = p.Required("code"); var verified = await WithClient(() => client.SubmitCode(code, token), token); Queue(ct => sync.Sync(cache.Lists.Count == 0, ct)); return verified;
+            case "sign_out":
+                await WithClient(() => { client.SignOut(); return Task.FromResult(true); }, token);
+                if (p.Flag("purge")) cache.SetMeta("sync_cursor", null); return J.Node(new { signed_out = true });
+            case "lists": return cache.Lists;
+            case "reminders": return cache.Reminders(p);
+            case "reminder": return cache.Reminder(p.Required("id"));
+            case "tags": return cache.Tags;
+            case "smart_counts": return cache.Counts;
+            case "settings": return cache.Settings;
+            case "set_settings": return cache.SetSettings(p);
+            case "create_reminder":
+                var r = new JsonObject { ["id"] = "local/" + Guid.NewGuid(), ["list_id"] = p.Required("list_id"), ["title"] = p.Optional("title", 4096) ?? "", ["description"] = p.Optional("description", 100000) ?? "", ["due_date"] = TimeUtil.Normalize(p["due_date"], p.Flag("all_day")), ["priority"] = p.Number("priority"), ["completed"] = false, ["flagged"] = p.Flag("flagged"), ["all_day"] = p.Flag("all_day"), ["created"] = TimeUtil.Now, ["modified"] = TimeUtil.Now };
+                cache.Transaction(() => { cache.Upsert(r, true); cache.Enqueue(r.Required("id"), "create", r, null); return true; }); Queue(ct => sync.Sync(false, ct)); return cache.Reminder(r.Required("id"));
+            case "update_reminder": return LocalChange(p, "update");
+            case "delete_reminder": return LocalChange(p, "delete");
+            case "restore_reminder": return LocalChange(p, "restore");
+            case "sync": Queue(ct => sync.Sync(p.Flag("full"), ct)); return J.Node(new { queued = true });
+            case "sync_status": return J.Node(new { running = sync.Running, last_sync = cache.Meta("last_sync"), has_cursor = cache.Meta("sync_cursor") is not null, pending_pushes = cache.Pending().Count, conflicts = cache.Conflicts.Count, sync_minutes = cache.Settings.Number("sync_minutes", 10) });
+            case "conflicts": return cache.Conflicts;
+            case "resolve_conflict":
+                var conflictId = p.Number("id", -1); if (conflictId < 0) throw CoreException.Bad("missing conflict id");
+                var conflict = cache.Conflicts.FirstOrDefault(c => c.Number("id") == conflictId);
+                if (p.Text("keep") == "local" && conflict?["local"] is JsonObject local)
+                {
+                    var patch = new JsonObject { ["id"] = conflict.Required("reminder_id") }; foreach (var f in Cache.EditFields) if (local.ContainsKey(f)) patch[f] = local[f]?.DeepClone(); LocalChange(patch, "update");
+                }
+                cache.Execute("UPDATE conflicts SET resolved=1 WHERE id=@p0", conflictId); return J.Node(new { resolved = conflictId });
+            case "due_notifications": return Notifications(p);
+            case "shutdown": return J.Node(new { bye = true });
+            default: throw new CoreException("NO_METHOD", $"unknown method '{method}'");
+        }
+    }
+    private JsonNode LocalChange(JsonObject p, string operation)
+    {
+        var id = p.Required("id"); JsonObject? result = null;
+        cache.Transaction(() =>
+        {
+            var current = cache.Reminder(id) ?? throw CoreException.Bad($"No such reminder: {id}"); var fields = new JsonObject();
+            if (operation is "delete" or "restore") fields["deleted"] = operation == "delete";
+            else
+            {
+                foreach (var (key, max) in new[] { ("title", 4096), ("description", 100000) }) if (p.Optional(key, max) is { } value) fields[key] = value;
+                foreach (var key in new[] { "priority", "completed", "flagged", "all_day" }) if (p.ContainsKey(key)) fields[key] = p[key]?.DeepClone();
+                var allDay = fields.ContainsKey("all_day") ? fields.Flag("all_day") : current.Flag("all_day");
+                if (p.ContainsKey("due_date")) fields["due_date"] = TimeUtil.Normalize(p["due_date"], allDay);
+                else if (p.ContainsKey("all_day") && allDay && current.Text("due_date") is { } raw) fields["due_date"] = TimeUtil.Normalize(JsonValue.Create(raw), true);
+            }
+            cache.Edit(id, fields); cache.Enqueue(id, operation == "delete" ? "delete" : "update", operation == "delete" ? new JsonObject() : fields, current.Text("change_tag")); result = cache.Reminder(id); return true;
+        });
+        Queue(ct => sync.Sync(false, ct)); return operation == "delete" ? J.Node(new { deleted = id }) : result!;
+    }
+    private JsonNode Notifications(JsonObject p)
+    {
+        var settings = cache.Settings; var toasts = new JsonArray(); var ids = new JsonArray();
+        if (!settings.Flag("notifications_enabled")) return new JsonObject { ["toasts"] = toasts, ["notified_ids"] = ids };
+        var now = p.Text("now") is { } raw ? TimeUtil.Parse(raw) : DateTimeOffset.UtcNow;
+        var cutoff = now.AddMinutes(-Math.Clamp(p.Number("stale_after_minutes", settings.Number("stale_after_minutes", 60)), 1, 1440));
+        var due = cache.Query("SELECT * FROM reminders WHERE deleted=0 AND completed=0 AND notified=0 AND due_date IS NOT NULL AND due_date<=@p0 ORDER BY due_date", TimeUtil.Iso(now)); var missed = new List<JsonNode>(); var fresh = new List<JsonNode>();
+        foreach (var r in due.OfType<JsonObject>()) { var alert = TimeUtil.NotifyAt(r.Required("due_date"), r.Flag("all_day")); if (alert > now) continue; (alert < cutoff ? missed : fresh).Add(r); }
+        string Names(List<JsonNode> reminders) => string.Join(", ", reminders.Take(3).Select(r => r.Text("title")).Where(s => !string.IsNullOrEmpty(s)));
+        if (missed.Count > 0) toasts.Add(J.Node(new { title = $"{missed.Count} reminder{(missed.Count == 1 ? "" : "s")} were due while you were away", body = Names(missed) + (missed.Count > 3 ? $", and {missed.Count - 3} more" : ""), reminder_id = (string?)null, kind = "summary" }));
+        if (fresh.Count > Math.Clamp(p.Number("max_individual", settings.Number("max_individual_toasts", 3)), 1, 10)) toasts.Add(J.Node(new { title = $"{fresh.Count} reminders are due", body = Names(fresh), reminder_id = (string?)null, kind = "summary" }));
+        else foreach (var r in fresh) toasts.Add(J.Node(new { title = r.Text("title") is { Length: > 0 } title ? title : "Reminder", body = TimeZoneInfo.ConvertTime(TimeUtil.Parse(r.Required("due_date")), TimeUtil.Zone()).ToString(r.Flag("all_day") ? "ddd dd MMM" : "ddd dd MMM, HH:mm"), reminder_id = r.Text("id"), kind = "reminder" }));
+        foreach (var r in missed.Concat(fresh)) { ids.Add(r.Text("id")); cache.Execute("UPDATE reminders SET notified=1 WHERE id=@p0", r.Text("id")); }
+        return new JsonObject { ["toasts"] = toasts, ["notified_ids"] = ids };
+    }
+    public async ValueTask DisposeAsync()
+    {
+        Task[] work;
+        lock (workGate) { if (disposed) return; disposed = true; work = background.Values.ToArray(); }
+        await lifetime.CancelAsync();
+        // Failed direct calls have already reached their callers. Their failure
+        // must not prevent disposal of the cache or HTTP client.
+        try { await Task.WhenAll(work); } catch (Exception) { }
+        await clientGate.WaitAsync(); try { client.Dispose(); cache.Dispose(); } finally { clientGate.Release(); }
+        lifetime.Dispose(); clientGate.Dispose();
+    }
+}

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier Condition="'$(Platform)' == 'x64'">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifiers Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</RuntimeIdentifiers>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NuGetLockFilePath Condition="'$(RuntimeIdentifier)' != ''">packages.$(RuntimeIdentifier).lock.json</NuGetLockFilePath>
+    <NuGetLockFilePath Condition="'$(Platform)' == 'x64'">packages.win-x64.lock.json</NuGetLockFilePath>
+    <NuGetLockFilePath Condition="'$(Platform)' == 'ARM64'">packages.win-arm64.lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Schema.sql" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.26" />
+  </ItemGroup>
+</Project>
