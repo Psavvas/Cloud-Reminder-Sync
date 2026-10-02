@@ -26,6 +26,11 @@
     <NavigationViewItem x:Name="ConflictItem" SelectsOnInvoked="False" Content="Sync conflicts" Tag="conflicts" Visibility="Collapsed"><NavigationViewItem.Icon><FontIcon Glyph="&#xE814;"/></NavigationViewItem.Icon></NavigationViewItem>
     <NavigationViewItem SelectsOnInvoked="False" Content="Sync now" Tag="sync"><NavigationViewItem.Icon><FontIcon Glyph="&#xE895;"/></NavigationViewItem.Icon></NavigationViewItem>
    </NavigationView.FooterMenuItems>
+   <NavigationView.PaneFooter>
+    <ToggleButton x:Name="SidebarPinButton" HorizontalAlignment="Stretch" Margin="4" Padding="10,8" Click="SidebarPin_Click" AutomationProperties.Name="Pin sidebar open" ToolTipService.ToolTip="Pin sidebar open">
+     <StackPanel Orientation="Horizontal" Spacing="12"><SymbolIcon x:Name="SidebarPinIcon" Symbol="Pin"/><TextBlock x:Name="SidebarPinLabel" Text="Pin sidebar open" VerticalAlignment="Center"/></StackPanel>
+    </ToggleButton>
+   </NavigationView.PaneFooter>
    <Grid>
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
     <StackPanel Grid.Row="0">

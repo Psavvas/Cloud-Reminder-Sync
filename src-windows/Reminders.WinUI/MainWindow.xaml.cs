@@ -72,8 +72,7 @@ public sealed partial class MainWindow : Window
         _paneHoverCloseTimer.Tick += (_, _) => CloseHoverPane();
         AttachSyncEvents();
         SetWindowSize();
-        _panePinnedOpen = UiPreferences.LoadNavigationPaneOpen();
-        Navigation.IsPaneOpen = _panePinnedOpen;
+        SetPanePinned(UiPreferences.LoadNavigationPaneOpen(), persist: false);
         _initializingPane = false;
         Activated += MainWindow_Activated;
         Closed += MainWindow_Closed;
@@ -428,21 +427,52 @@ public sealed partial class MainWindow : Window
 
     private void Navigation_PaneOpening(NavigationView sender, object args)
     {
+        SidebarPinLabel.Visibility = Visibility.Visible;
         if (_initializingPane) return;
         if (_temporaryPaneTarget is true) { _temporaryPaneTarget = null; return; }
-        _hoverExpanded = false;
-        _panePinnedOpen = true;
-        if (!_demo) UiPreferences.SaveNavigationPaneOpen(true);
+        if (!_panePinnedOpen) _hoverExpanded = true;
     }
 
-    private void Navigation_PaneClosing(NavigationView sender, object args)
+    private void Navigation_PaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
     {
         if (_initializingPane) return;
+        // A delayed light-dismiss from the compact view can arrive after the
+        // pin action. It must not undo the user's explicit choice.
+        if (_panePinnedOpen) { args.Cancel = true; return; }
+        SidebarPinLabel.Visibility = Visibility.Collapsed;
         if (_temporaryPaneTarget is false) { _temporaryPaneTarget = null; _hoverExpanded = false; return; }
         _hoverExpanded = false;
-        _panePinnedOpen = false;
-        if (!_demo) UiPreferences.SaveNavigationPaneOpen(false);
     }
+
+    private void SetPanePinned(bool pinned, bool persist = true)
+    {
+        _paneHoverOpenTimer.Stop();
+        _paneHoverCloseTimer.Stop();
+        _hoverExpanded = false;
+        _temporaryPaneTarget = null;
+        _panePinnedOpen = pinned;
+        // Left reserves space for the pinned sidebar instead of opening an
+        // overlay that NavigationView dismisses when a list is selected.
+        var wasInitializing = _initializingPane;
+        _initializingPane = true;
+        try
+        {
+            Navigation.PaneDisplayMode = pinned ? NavigationViewPaneDisplayMode.Left : NavigationViewPaneDisplayMode.LeftCompact;
+            Navigation.IsPaneToggleButtonVisible = !pinned;
+            Navigation.IsPaneOpen = pinned;
+        }
+        finally { _initializingPane = wasInitializing; }
+        var action = pinned ? "Unpin sidebar" : "Pin sidebar open";
+        SidebarPinButton.IsChecked = pinned;
+        SidebarPinLabel.Text = action;
+        SidebarPinLabel.Visibility = pinned ? Visibility.Visible : Visibility.Collapsed;
+        SidebarPinIcon.Symbol = pinned ? Symbol.UnPin : Symbol.Pin;
+        ToolTipService.SetToolTip(SidebarPinButton, action);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SidebarPinButton, action);
+        if (persist && !_demo) UiPreferences.SaveNavigationPaneOpen(pinned);
+    }
+
+    private void SidebarPin_Click(object sender, RoutedEventArgs e) => SetPanePinned(SidebarPinButton.IsChecked == true);
 
     private void Navigation_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
