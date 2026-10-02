@@ -5,7 +5,7 @@
          IgnorableNamespaces="uap rescap">
   <Identity Name="RemindersForWindows" Publisher="CN=paulsavvas.com" Version="0.3.0.0" />
   <Properties>
-    <DisplayName>Reminders for Windows</DisplayName>
+    <DisplayName>iCloud Reminders</DisplayName>
     <PublisherDisplayName>paulsavvas.com</PublisherDisplayName>
     <Description>A native Windows client for iCloud Reminders.</Description>
     <Logo>Assets\StoreLogo.png</Logo>
@@ -16,7 +16,7 @@
   </Dependencies>
   <Applications>
     <Application Id="Reminders" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
-      <uap:VisualElements DisplayName="Reminders" Description="A native Windows client for iCloud Reminders."
+      <uap:VisualElements DisplayName="iCloud Reminders" Description="A native Windows client for iCloud Reminders."
                           BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png"
                           Square44x44Logo="Assets\Square44x44Logo.png" />
     </Application>

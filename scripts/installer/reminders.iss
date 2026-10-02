@@ -1,4 +1,4 @@
-; Inno Setup script for Reminders for Windows.
+; Inno Setup script for iCloud Reminders.
 ;
 ; The app is built unpackaged and self-contained (WindowsPackageType=None,
 ; WindowsAppSDKSelfContained=true), so installing is genuinely just laying down
@@ -28,9 +28,9 @@
 ; A stable GUID keeps upgrades in place instead of stacking side-by-side
 ; entries in Apps & Features. Never change it for this product.
 AppId={{7C4E1E2A-9F3B-4D5C-8A61-2B0E7F9C4A13}
-AppName=Reminders for Windows
+AppName=iCloud Reminders
 AppVersion={#AppVersion}
-AppVerName=Reminders for Windows {#AppVersion}
+AppVerName=iCloud Reminders {#AppVersion}
 AppPublisher=paulsavvas.com
 AppPublisherURL=https://paulsavvas.com
 AppSupportURL=https://github.com/Psavvas/iCloud-Reminders-for-Windows/issues
@@ -43,7 +43,7 @@ VersionInfoVersion={#AppVersion}
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 DefaultDirName={autopf}\Reminders for Windows
-DefaultGroupName=Reminders for Windows
+DefaultGroupName=iCloud Reminders
 DisableProgramGroupPage=yes
 AllowNoIcons=yes
 
@@ -51,9 +51,9 @@ OutputDir={#OutputDir}
 OutputBaseFilename=Reminders-for-Windows-{#Arch}-Setup
 SetupIconFile={#IconFile}
 UninstallDisplayIcon={app}\Reminders.exe
-UninstallDisplayName=Reminders for Windows
+UninstallDisplayName=iCloud Reminders
 
-; The sidecar holds the SQLite cache open, so an upgrade over a running install
+; The app holds the SQLite cache open, so an upgrade over a running install
 ; would otherwise fail on locked binaries. Restart Manager asks the running
 ; instance to close instead, which needs no cooperation from the app itself.
 CloseApplications=yes
@@ -82,22 +82,27 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "startup"; Description: "Start Reminders when I sign in"; GroupDescription: "Startup"; Flags: unchecked
+Name: "startup"; Description: "Start iCloud Reminders when I sign in"; GroupDescription: "Startup"; Flags: unchecked
 
 [Files]
-; Everything the publish step produced, including reminders-sidecar.exe. The
-; app locates the sidecar beside its own executable, so the two must stay
-; together in one directory.
+; Install the complete self-contained app, including the C# backend library.
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; Remove only this app's old shortcuts when upgrading to the new display name.
+Type: files; Name: "{autoprograms}\Reminders for Windows\Reminders for Windows.lnk"
+Type: files; Name: "{autoprograms}\Reminders for Windows\{cm:UninstallProgram,Reminders for Windows}.lnk"
+Type: files; Name: "{autodesktop}\Reminders for Windows.lnk"
+Type: files; Name: "{userstartup}\Reminders for Windows.lnk"
+
 [Icons]
-Name: "{group}\Reminders for Windows"; Filename: "{app}\Reminders.exe"
-Name: "{group}\{cm:UninstallProgram,Reminders for Windows}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\Reminders for Windows"; Filename: "{app}\Reminders.exe"; Tasks: desktopicon
-Name: "{userstartup}\Reminders for Windows"; Filename: "{app}\Reminders.exe"; Tasks: startup
+Name: "{group}\iCloud Reminders"; Filename: "{app}\Reminders.exe"
+Name: "{group}\{cm:UninstallProgram,iCloud Reminders}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\iCloud Reminders"; Filename: "{app}\Reminders.exe"; Tasks: desktopicon
+Name: "{userstartup}\iCloud Reminders"; Filename: "{app}\Reminders.exe"; Tasks: startup
 
 [Run]
-Filename: "{app}\Reminders.exe"; Description: "{cm:LaunchProgram,Reminders for Windows}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Reminders.exe"; Description: "{cm:LaunchProgram,iCloud Reminders}"; Flags: nowait postinstall skipifsilent
 Filename: "{app}\Reminders.exe"; Flags: nowait; Check: IsAppUpdate
 
 [INI]
