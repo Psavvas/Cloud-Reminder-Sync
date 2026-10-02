@@ -64,6 +64,26 @@ existing users. MSIX installations use Windows/Store package deployment for
 upgrades. The app's GitHub updater executes installers only for Inno installations;
 MSIX and portable builds show a release link.
 
+## App updates
+
+Installer builds check GitHub for updates on launch and every six hours while
+running. A banner offers **Install and restart** when a newer stable release is
+available. You can also use **Settings → Check for updates**. The app downloads
+the matching x64 or ARM64 installer, checks its size and GitHub SHA-256 digest,
+then upgrades the existing installation and reopens. Reminder data, queued
+changes, preferences and sign-in credentials are kept. Save unfinished edits
+before restarting. Failed checks never prevent normal app use.
+
+Install a build containing the updater once to enable it. Portable, development
+and MSIX builds offer a link to the release instead of running an installer.
+
+To ship an update, increase `<Version>` in the WinUI project and the MSIX version
+in `src-windows/Reminders.Package/Package.appxmanifest` together, commit the changes,
+and push a matching tag (for
+example `v0.4.0`). CI creates a draft with both installers. Review and publish
+that draft as a stable GitHub release; drafts and prereleases are ignored by
+the updater. Committing code alone does not distribute an update.
+
 ## What works
 
 | Feature | Support |
