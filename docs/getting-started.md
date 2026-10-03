@@ -1,210 +1,104 @@
 # Getting started on Windows
 
-Run all commands from the repository root in PowerShell.
+## Requirements
 
-## Tooling
+- Windows 10 1809 or newer, x64 or ARM64.
+- .NET 8 SDK or newer.
+- Visual Studio 2022 or newer with .NET desktop development and Windows Application
+  Packaging Project tools for packaged debugging and the package designer.
+- Windows SDK with MakeAppx and SignTool for command-line MSIX packaging/signing.
 
-Node.js, npm, a browser runtime, and JavaScript tooling are **not required**.
-The desktop interface is C# and WinUI 3. The application has two useful
-development paths:
+The backend is C#. Rust, Cargo, MSVC, Python, Node.js and npm are not needed to
+build or run the application. Python is used only by CI policy tests.
 
-- **Demo UI:** .NET 8 SDK only. It does not build or start Rust, access the
-  cache, request credentials, or connect to iCloud.
-- **Complete application:** .NET 8 SDK, Rust's MSVC toolchain, and Visual
-  Studio 2022 or Build Tools with the Windows SDK and matching x64 or ARM64
-  MSVC tools.
+## Visual Studio
 
-NuGet may need network access on the first build to restore the Windows App SDK
-packages already declared by the project. No global packages need to be
-installed by this repository.
+Open `Reminders.Windows.sln`. Select x64 or ARM64 and set `Reminders.Package` as
+the startup project. Its project reference builds and publishes `Reminders.WinUI`
+with `Reminders.Core` included. The checked-in `Package.appxmanifest` supports the
+manifest designer and **Publish → Create App Packages** workflow.
 
-## Launch the demo UI
+Configure a signing certificate in the package project before deploying with F5.
+Use a certificate whose subject matches the manifest publisher. Trust a development
+certificate on your test device as appropriate. No private signing key is committed.
+Unsigned packages can be built for inspection but cannot be installed.
 
-This is the quickest way to open the application without an account:
+For unpackaged debugging, set `Reminders.WinUI` as the startup project. The
+`Reminders.Core.Tests` and `AppUpdater.Tests` console projects can run separately.
+
+## Demo and development launches
 
 ```powershell
 .\scripts\run-windows.ps1 -Demo
-```
-
-Optionally check the demo prerequisites first:
-
-```powershell
-.\scripts\check-prereqs.ps1 -Demo
-```
-
-After a production build, the same isolated mode can be launched directly:
-
-```powershell
-.\dist-windows\Reminders.exe --demo
-```
-
-Demo reminders exist only in memory and disappear when the window closes.
-
-## Run the complete application for development
-
-```powershell
-.\scripts\check-prereqs.ps1
 .\scripts\run-windows.ps1
 ```
 
-The run script builds `dist-sidecar\reminders-sidecar.exe` when it is missing,
-then launches the Debug WinUI application. The normal application starts the
-sidecar and displays the iCloud sign-in flow when no restored session exists.
+Demo mode displays sample data without opening the real cache, reading credentials,
+or contacting iCloud. Debug builds accept `REMINDERS_DATA_DIR` for a separate test
+cache directory. Release builds use the normal LocalAppData location. There is no
+executable override or sidecar process.
 
-## Create and launch a production build
+## MSIX distribution
 
-```powershell
-.\scripts\check-prereqs.ps1
-.\scripts\build-windows.ps1
-.\dist-windows\Reminders.exe
-```
-
-The production output is a self-contained x64 folder at `dist-windows`. Keep
-the folder together: it contains the native executable, compiled WinUI
-resources, Windows App SDK runtime files, icon, and Rust sidecar.
-
-For a native ARM64 build:
+For public distribution without asking users to trust a development certificate,
+use the [Microsoft Store submission workflow](microsoft-store.md). Microsoft signs
+the approved app; `build-msix.ps1 -Store` prepares packages using your assigned
+Partner Center identity and writes them to `dist-store`.
 
 ```powershell
-.\scripts\check-prereqs.ps1 -Architecture ARM64
-.\scripts\build-windows.ps1 -Architecture ARM64
-```
-
-ARM64 output is written to `dist-windows-arm64`. The ARM64 Rust target
-(`aarch64-pc-windows-msvc`) and Visual Studio ARM64 MSVC tools must already be
-installed. The scripts report either missing prerequisite without installing
-anything.
-
-## Create an .exe installer
-
-This is the distribution format to reach for. It needs
-[Inno Setup 6](https://jrsoftware.org/isdl.php) —
-`winget install JRSoftware.InnoSetup`:
-
-```powershell
-.\scripts\build-installer.ps1 -Architecture x64
-.\scripts\build-installer.ps1 -Architecture ARM64
-```
-
-Installers are written to `dist-installer`. The install is per-user (into
-`%LOCALAPPDATA%\Programs`), so it raises no admin prompt, and it registers a
-normal entry in Apps & Features. Uninstalling leaves the reminder cache and
-settings in place; credentials stay in Windows Credential Manager and are never
-touched by the installer.
-
-An unsigned installer draws a SmartScreen warning on first run, which the user
-can dismiss via **More info** then **Run anyway**. This is the practical
-difference from MSIX below: an unsigned `.exe` installs, an unsigned MSIX does
-not. To sign it:
-
-```powershell
-.\scripts\build-installer.ps1 -Architecture x64 -CertificateThumbprint YOUR_THUMBPRINT
-```
-
-No certificate is generated or stored in this repository, and CI does not sign.
-Signing requires a key, and a key committed to a repository or handed to CI is a
-key that can sign anything in your name — see `SECURITY_AUDIT.md`.
-
-## Create an MSIX package
-
-The package includes both the WinUI executable and architecture-matched Rust
-sidecar:
-
-```powershell
+.\scripts\check-prereqs.ps1 -Msix
 .\scripts\build-msix.ps1 -Architecture x64
 .\scripts\build-msix.ps1 -Architecture ARM64
 ```
 
-Packages are written to `dist-msix`. They are unsigned by default, which is
-appropriate for Microsoft Store submission but **not installable as-is**:
-Windows shows "Publisher: Unknown" and disables the Install button. Use the
-`.exe` installer above for anything you intend to run.
-
-To produce a sideloadable package, the manifest publisher must match a trusted
-code-signing certificate in the current user's certificate store:
+The script publishes the self-contained application and packages it using the
+same manifest and logos as Visual Studio. Outputs are
+`dist-msix\Reminders-for-Windows-x64.msix` and
+`dist-msix\Reminders-for-Windows-ARM64.msix`. `-SkipBuild` packages an existing
+portable publish directory.
 
 ```powershell
 .\scripts\build-msix.ps1 -Architecture x64 -CertificateThumbprint YOUR_THUMBPRINT
+Add-AppxPackage .\dist-msix\Reminders-for-Windows-x64.msix
 ```
 
-Use `-IdentityName` and `-Publisher` when preparing a Store-reserved
-identity. When `-CertificateThumbprint` is supplied, the certificate subject
-is used as the publisher automatically. Without either override, the manifest
-uses `CN=paulsavvas.com` as its publisher identity and `paulsavvas.com` as its
-displayed publisher. A signing certificate's subject must exactly match the
-manifest identity; the displayed domain is not itself proof of code signing.
+Signing uses `Cert:\CurrentUser\My` and automatically adopts the certificate subject
+as Publisher. `-IdentityName` and `-Publisher` support an assigned Store identity
+for unsigned artifacts. Keep identity/publisher stable and raise both the WinUI
+`<Version>` and manifest Identity Version (four components) when shipping updates.
+Windows package deployment handles MSIX upgrades; the app does not run an Inno
+installer from an MSIX installation.
 
-The packaging flow follows Microsoft's
-[manual MSIX component guidance](https://learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-manual-conversion)
-because the package contains both the WinUI executable and Rust sidecar. See
-Microsoft's [package and deployment overview](https://learn.microsoft.com/windows/apps/package-and-deploy/)
-for Store and enterprise distribution choices.
+Windows applies package data virtualization: installing MSIX does not automatically
+import an unpackaged app's LocalAppData. Verify migration on a test account before
+replacing a production installation. Credential Manager target names remain stable.
 
-To rebuild only the Rust executable:
+## Portable and existing installer builds
 
 ```powershell
-.\scripts\build-sidecar.ps1
+.\scripts\build-windows.ps1 -Architecture x64
+.\dist-windows\Reminders.exe
+.\scripts\build-installer.ps1 -Architecture x64
 ```
 
-To republish the frontend using an already-built sidecar:
+Keep the publish folder together; it contains the WinUI and .NET runtimes, SQLite
+native library, resources and `Reminders.Core.dll`. ARM64 output is under
+`dist-windows-arm64`. The Inno installer supports existing installations/updaters.
+
+## Verification and troubleshooting
 
 ```powershell
-.\scripts\build-windows.ps1 -Architecture x64 -SkipSidecar
-```
-
-## Tests
-
-```powershell
-cargo test --manifest-path .\sidecar\Cargo.toml --locked
+dotnet run --project .\src-windows\Reminders.Core.Tests\Reminders.Core.Tests.csproj -c Release
+dotnet run --project .\src-windows\AppUpdater.Tests\AppUpdater.Tests.csproj -c Release
 dotnet build .\src-windows\Reminders.WinUI\Reminders.WinUI.csproj -c Release -p:Platform=x64
 ```
 
-The Rust tests do not require an iCloud account. Demo mode is the safe path for
-interactive frontend testing.
+Choose **Text me a code** and enter the latest texted code for two-factor sign-in.
+Device-prompt codes cannot complete Apple's HSA2 bridge in this app. Accounts need
+a trusted phone number. Cached reminders remain available during outages; upload
+errors leave edits queued and conflicts ask which version to keep. **Sync now**
+retrieves changes from Apple devices; the normal automatic interval is ten minutes.
 
-## Signing in with two-factor authentication
-
-**Only a texted code can complete sign-in.** When the verification screen
-appears, choose **Text me a code** and enter the code from the message.
-
-The six digits Apple shows in the prompt on a trusted iPhone, iPad or Mac are
-verified through Apple's HSA2 *bridge* — a websocket exchange this connector
-does not implement. For accounts Apple has moved to it, the legacy endpoint
-answers `409` while Apple goes on displaying the prompt, so a device code looks
-correct and is rejected every time. It is not a typing mistake and no code will
-ever work there. The app detects that specific refusal and says so rather than
-blaming the code.
-
-The app asks for a text automatically whenever Apple lists a trusted number, so
-in the normal case there is nothing to choose.
-
-**An Apple ID with no trusted phone number cannot finish signing in.** The
-device prompt is then the only route Apple offers, and it is the one that does
-not work. Add a phone number at [appleid.apple.com](https://appleid.apple.com),
-or see [protocol-findings.md](protocol-findings.md) for what porting the bridge
-involves — pyicloud implements it in roughly 2,300 lines, which is how the
-previous Python sidecar supported device prompts.
-
-A few behaviours that look like bugs and are not:
-
-- **Requesting a text retires the previous code.** Only ask for one when you
-  actually want a new code; the older one stops working.
-- **Apple answers the "send a code" request with a non-2xx status and sends the
-  code anyway.** A failure there does not mean nothing arrived.
-- **You can legitimately hold two live codes at once** if both routes delivered.
-  Use the texted one.
-
-## Troubleshooting
-
-- Sign-in problems involving a verification code are almost always the
-  device-prompt limitation above, not a bad password.
-- If PowerShell blocks local scripts, use:
-  `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows.ps1 -Demo`
-- Application diagnostics are written to
-  `%LOCALAPPDATA%\RemindersSync\logs\app.log`.
-- Normal application data is under `%LOCALAPPDATA%\RemindersSync`; demo mode
-  does not read or modify it.
-- Sidebar state is a UI-only preference stored at
-  `%LOCALAPPDATA%\RemindersForWindows\ui-settings.json`. Demo mode may update
-  this preference, but never reminder data or credentials.
-- If the sidecar is missing, run `.\scripts\build-sidecar.ps1`.
+Unpackaged logs are under `%LOCALAPPDATA%\RemindersSync\logs\app.log`; packaged
+installations may have a virtualized location. Include the app version and relevant
+error when reporting issues. Review logs before sharing them.

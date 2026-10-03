@@ -180,7 +180,7 @@ public sealed partial class MainWindow
             var due = FormatDueDate(scheduled.IsOn ? date.Date : null, allDay.IsOn, time.Time);
             var priorityValue = priority.SelectedIndex switch { 1 => 9, 2 => 5, 3 => 1, _ => 0 };
             if (_demo) _demoRows.Add(new() { Id = Guid.NewGuid().ToString(), ListId = listId, Title = title.Text.Trim(), Description = notes.Text, DueDate = due, AllDay = allDay.IsOn, Priority = priorityValue, Flagged = flagged.IsOn });
-            else await _sidecar.CallAsync("create_reminder", new { list_id = listId, title = title.Text.Trim(), description = notes.Text, due_date = due, all_day = allDay.IsOn, priority = priorityValue, flagged = flagged.IsOn });
+            else await _sync.CallAsync("create_reminder", new { list_id = listId, title = title.Text.Trim(), description = notes.Text, due_date = due, all_day = allDay.IsOn, priority = priorityValue, flagged = flagged.IsOn });
             await RefreshAllAsync();
         }
         catch (Exception error) { ShowInfo("Couldn't add reminder", error.Message, InfoBarSeverity.Error); }
@@ -221,6 +221,19 @@ public sealed partial class MainWindow
             var requestedUpdateCheck = false;
             checkUpdates.Click += (_, _) => { requestedUpdateCheck = true; dialog.Hide(); };
             panel.Children.Add(checkUpdates);
+            Heading("About Cloud Reminder Sync");
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Cloud Reminder Sync is an independent app and is not affiliated with, endorsed by, or sponsored by Apple Inc. iCloud is a trademark of Apple Inc. Sync uses unofficial iCloud interfaces that may change or stop working without notice.",
+                TextWrapping = TextWrapping.Wrap
+            });
+            panel.Children.Add(new HyperlinkButton
+            {
+                Content = "View source on GitHub",
+                NavigateUri = new Uri("https://github.com/Psavvas/Cloud-Reminder-Sync"),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(0)
+            });
             sync.ValueChanged += (_, _) => dialog.IsPrimaryButtonEnabled = double.IsFinite(sync.Value) && sync.Value >= 5 && sync.Value <= 60;
             var settingsResult = await dialog.ShowAsync();
             if (requestedUpdateCheck) { await CheckForUpdatesAsync(true); return; }
@@ -228,7 +241,7 @@ public sealed partial class MainWindow
             if (!double.IsFinite(sync.Value)) { ShowInfo("Settings weren't saved", "Enter a sync interval from 5 to 60 minutes.", InfoBarSeverity.Warning); return; }
             themeValue = theme.SelectedIndex switch { 1 => "light", 2 => "dark", _ => "system" };
             var values = new { theme = themeValue, sync_minutes = (int)Math.Clamp(sync.Value, 5, 60), notifications_enabled = notifications.IsOn, default_list_id = defaultList.SelectedValue as string };
-            _settings = _demo ? JsonSerializer.SerializeToElement(values) : await _sidecar.CallAsync("set_settings", values);
+            _settings = _demo ? JsonSerializer.SerializeToElement(values) : await _sync.CallAsync("set_settings", values);
             _uiPreferences.CompletionAnimation = animation.IsOn; SaveUiPreferences(); ApplyTheme(themeValue);
         }
         catch (Exception error) { ShowInfo("Couldn't save settings", error.Message, InfoBarSeverity.Error); }

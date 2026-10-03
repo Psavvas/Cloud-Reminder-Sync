@@ -5,14 +5,30 @@ param(
     [ValidatePattern('^[A-Za-z0-9.-]{3,50}$')]
     [string]$IdentityName = 'RemindersForWindows',
     [string]$Publisher = 'CN=paulsavvas.com',
+    [string]$PublisherDisplayName,
     [string]$CertificateThumbprint,
+    [switch]$Store,
     [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
+if ($Store) {
+    [xml]$storeManifest = Get-Content -LiteralPath (Join-Path $repository 'src-windows/Reminders.Package/Package.appxmanifest') -Raw
+    if (-not $PSBoundParameters.ContainsKey('IdentityName')) { $IdentityName = $storeManifest.Package.Identity.Name }
+    if (-not $PSBoundParameters.ContainsKey('Publisher')) { $Publisher = $storeManifest.Package.Identity.Publisher }
+    if (-not $PSBoundParameters.ContainsKey('PublisherDisplayName')) { $PublisherDisplayName = $storeManifest.Package.Properties.PublisherDisplayName }
+    if ([string]::IsNullOrWhiteSpace($IdentityName) -or $IdentityName -eq 'RemindersForWindows' -or
+        [string]::IsNullOrWhiteSpace($PublisherDisplayName) -or $Publisher -eq 'CN=paulsavvas.com') {
+        throw 'Store submissions require the assigned Partner Center identity in Package.appxmanifest or explicit identity parameters.'
+    }
+    if ($CertificateThumbprint) { throw 'Store submissions are signed by Microsoft. Omit -CertificateThumbprint.' }
+    if ($Publisher -notmatch '^CN=' -or $Publisher.Contains('OID.2.25.311729368913984317654407730594956997722')) {
+        throw 'Use the exact Package/Identity/Publisher assigned by Partner Center for Store submission.'
+    }
+}
 $portableOutput = if ($Architecture -eq 'ARM64') { Join-Path $repository 'dist-windows-arm64' } else { Join-Path $repository 'dist-windows' }
-$packageOutput = Join-Path $repository 'dist-msix'
+$packageOutput = Join-Path $repository $(if ($Store) { 'dist-store' } else { 'dist-msix' })
 $project = Join-Path $repository 'src-windows\Reminders.WinUI\Reminders.WinUI.csproj'
 $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
 $makeAppx = Get-ChildItem $sdkRoot -Recurse -Filter makeappx.exe -ErrorAction SilentlyContinue |
@@ -37,69 +53,23 @@ if ($CertificateThumbprint) {
 $sourceVersion = [version]$projectXml.Project.PropertyGroup.Version
 $packageVersion = "$($sourceVersion.Major).$($sourceVersion.Minor).$($sourceVersion.Build).0"
 $processorArchitecture = if ($Architecture -eq 'ARM64') { 'arm64' } else { 'x64' }
-$escapedPublisher = [Security.SecurityElement]::Escape($Publisher)
 $staging = Join-Path ([IO.Path]::GetTempPath()) "reminders-msix-$([guid]::NewGuid().ToString('N'))"
-
-function New-PackageLogo([string]$Source, [string]$Destination, [int]$Width, [int]$Height) {
-    Add-Type -AssemblyName System.Drawing
-    $sourceImage = [Drawing.Image]::FromFile($Source)
-    try {
-        $bitmap = [Drawing.Bitmap]::new($Width, $Height)
-        try {
-            $graphics = [Drawing.Graphics]::FromImage($bitmap)
-            try {
-                $graphics.Clear([Drawing.Color]::Transparent)
-                $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-                $graphics.DrawImage($sourceImage, 0, 0, $Width, $Height)
-            }
-            finally { $graphics.Dispose() }
-            $bitmap.Save($Destination, [Drawing.Imaging.ImageFormat]::Png)
-        }
-        finally { $bitmap.Dispose() }
-    }
-    finally { $sourceImage.Dispose() }
-}
 
 try {
     New-Item -ItemType Directory -Path $staging, (Join-Path $staging 'Assets'), $packageOutput -Force | Out-Null
     Copy-Item -Path (Join-Path $portableOutput '*') -Destination $staging -Recurse -Force
     Get-ChildItem $staging -Filter '*.pdb' -File -ErrorAction SilentlyContinue | Remove-Item -Force
-    $icon = Join-Path $repository 'src-windows\Reminders.WinUI\Assets\icon-v2.png'
-    New-PackageLogo $icon (Join-Path $staging 'Assets\StoreLogo.png') 50 50
-    New-PackageLogo $icon (Join-Path $staging 'Assets\Square44x44Logo.png') 44 44
-    New-PackageLogo $icon (Join-Path $staging 'Assets\Square150x150Logo.png') 150 150
-
-    $manifest = @"
-<?xml version="1.0" encoding="utf-8"?>
-<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
-         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
-         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-         IgnorableNamespaces="uap rescap">
-  <Identity Name="$IdentityName" Publisher="$escapedPublisher" Version="$packageVersion" ProcessorArchitecture="$processorArchitecture" />
-  <Properties>
-    <DisplayName>Reminders for Windows</DisplayName>
-    <PublisherDisplayName>paulsavvas.com</PublisherDisplayName>
-    <Description>A native Windows client for iCloud Reminders.</Description>
-    <Logo>Assets\StoreLogo.png</Logo>
-  </Properties>
-  <Resources><Resource Language="en-us" /></Resources>
-  <Dependencies>
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
-  </Dependencies>
-  <Applications>
-    <Application Id="Reminders" Executable="Reminders.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="Reminders" Description="A native Windows client for iCloud Reminders."
-                          BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png"
-                          Square44x44Logo="Assets\Square44x44Logo.png" />
-    </Application>
-  </Applications>
-  <Capabilities>
-    <rescap:Capability Name="runFullTrust" />
-    <Capability Name="internetClient" />
-  </Capabilities>
-</Package>
-"@
-    [IO.File]::WriteAllText((Join-Path $staging 'AppxManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))
+    $packageProject = Join-Path $repository 'src-windows\Reminders.Package'
+    Copy-Item -Path (Join-Path $packageProject 'Assets\*.png') -Destination (Join-Path $staging 'Assets') -Force
+    [xml]$manifestXml = Get-Content -LiteralPath (Join-Path $packageProject 'Package.appxmanifest') -Raw
+    $manifestXml.Package.Identity.SetAttribute('Name', $IdentityName)
+    $manifestXml.Package.Identity.SetAttribute('Publisher', $Publisher)
+    $manifestXml.Package.Identity.SetAttribute('Version', $packageVersion)
+    $manifestXml.Package.Identity.SetAttribute('ProcessorArchitecture', $processorArchitecture)
+    if ($Store) { $manifestXml.Package.Properties.PublisherDisplayName = $PublisherDisplayName }
+    $manifestXml.Package.Applications.Application.SetAttribute('Executable', 'Reminders.exe')
+    $manifestXml.Package.Applications.Application.SetAttribute('EntryPoint', 'Windows.FullTrustApplication')
+    $manifestXml.Save((Join-Path $staging 'AppxManifest.xml'))
     $package = Join-Path $packageOutput "Reminders-for-Windows-$Architecture.msix"
     $packOutput = @(& $makeAppx.FullName pack /o /h SHA256 /d $staging /p $package 2>&1)
     if ($LASTEXITCODE -ne 0) { $packOutput | Write-Host; throw 'MakeAppx failed to create the MSIX package.' }
@@ -112,6 +82,9 @@ try {
         if (-not $signTool) { throw 'SignTool.exe was not found in the installed Windows SDK.' }
         & $signTool.FullName sign /sha1 $CertificateThumbprint /fd SHA256 $package
         if ($LASTEXITCODE -ne 0) { throw 'SignTool failed to sign the MSIX package.' }
+    }
+    elseif ($Store) {
+        Write-Host 'Store submission package created. Upload it to Partner Center; Microsoft signs the approved distribution. This file is not a trusted installer yet.'
     }
     else {
         Write-Warning 'The MSIX is unsigned. Sign it with -CertificateThumbprint or submit it to the Microsoft Store before installation.'

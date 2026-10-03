@@ -16,7 +16,7 @@ namespace Reminders.Windows;
 
 public sealed partial class MainWindow : Window
 {
-    private SidecarClient _sidecar = new();
+    private SyncClient _sync = new();
     private readonly ObservableCollection<ReminderItem> _reminders = [];
     private readonly DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(15) };
@@ -50,7 +50,7 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(6) };
     private AppUpdate? _availableUpdate;
     private bool _updateBusy;
-    private bool _sidecarDisposedForUpdate;
+    private bool _syncDisposedForUpdate;
 
     public MainWindow()
     {
@@ -60,6 +60,7 @@ public sealed partial class MainWindow : Window
         Root.KeyboardAccelerators.Add(settingsAccelerator);
         Navigation.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(Navigation_PointerMoved), true);
         Navigation.AddHandler(UIElement.PointerExitedEvent, new PointerEventHandler(Navigation_PointerExited), true);
+        Navigation.Loaded += Navigation_Loaded;
         foreach (var item in Navigation.MenuItems.Concat(Navigation.FooterMenuItems).OfType<NavigationViewItem>()) AttachPaneHover(item);
         ReminderList.ItemsSource = _reminders;
         DetailPriority.SelectedIndex = 0;
@@ -70,10 +71,9 @@ public sealed partial class MainWindow : Window
         _updateTimer.Tick += async (_, _) => await CheckForUpdatesAsync(false);
         _paneHoverOpenTimer.Tick += (_, _) => OpenPaneForHover();
         _paneHoverCloseTimer.Tick += (_, _) => CloseHoverPane();
-        AttachSidecarEvents();
+        AttachSyncEvents();
         SetWindowSize();
-        _panePinnedOpen = UiPreferences.LoadNavigationPaneOpen();
-        Navigation.IsPaneOpen = _panePinnedOpen;
+        SetPanePinned(UiPreferences.LoadNavigationPaneOpen(), persist: false);
         _initializingPane = false;
         Activated += MainWindow_Activated;
         Closed += MainWindow_Closed;
@@ -92,7 +92,7 @@ public sealed partial class MainWindow : Window
 
     private async void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
     {
-        if (_sidecarDisposedForUpdate) return;
+        if (_syncDisposedForUpdate) return;
         if (args.WindowActivationState == WindowActivationState.Deactivated) return;
         if (_bootStarted)
         {
@@ -116,10 +116,10 @@ public sealed partial class MainWindow : Window
         SetGateState("Starting the sync service…");
         try
         {
-            if (!_sidecar.IsRunning) await _sidecar.StartAsync();
+            if (!_sync.IsRunning) await _sync.StartAsync();
             SetGateState("Checking your account…");
-            var status = await _sidecar.CallAsync("auth_status", new { });
-            _settings = await _sidecar.CallAsync("settings", new { });
+            var status = await _sync.CallAsync("auth_status", new { });
+            _settings = await _sync.CallAsync("settings", new { });
             ApplyTheme(_settings.Text("theme", "system"));
             if (status.Flag("needs_2fa") && !status.Flag("authenticated"))
             {
@@ -169,15 +169,15 @@ public sealed partial class MainWindow : Window
     private async Task LoadNavigationAsync()
     {
         if (_demo) return;
-        var listsTask = _sidecar.CallAsync<List<ReminderList>>("lists", new { });
-        var tagsTask = _sidecar.CallAsync<List<string>>("tags", new { });
-        var countsTask = _sidecar.CallAsync("smart_counts", new { });
+        var listsTask = _sync.CallAsync<List<ReminderList>>("lists", new { });
+        var tagsTask = _sync.CallAsync<List<ReminderTag>>("tags", new { });
+        var countsTask = _sync.CallAsync("smart_counts", new { });
         await Task.WhenAll(listsTask, tagsTask, countsTask);
         _lists = listsTask.Result;
         DetailList.ItemsSource = _lists.Where(list => !list.IsGroup).ToList();
         var counts = countsTask.Result;
         SetBadge("smart:today", counts.Number("today"));
-        _tags = tagsTask.Result.Distinct(StringComparer.CurrentCultureIgnoreCase).Order().ToList();
+        _tags = tagsTask.Result.Select(tag => tag.Name).Distinct(StringComparer.CurrentCultureIgnoreCase).Order().ToList();
         RebuildListNavigation();
     }
 
@@ -222,7 +222,7 @@ public sealed partial class MainWindow : Window
         {
             var query = new Dictionary<string, object?> { ["include_completed"] = ShowCompleted.IsOn, ["search"] = string.IsNullOrWhiteSpace(SearchBox.Text) ? null : SearchBox.Text.Trim(), ["sort"] = _sort };
             query[_view.Kind switch { NavKind.List => "list_id", NavKind.Tag => "tag", _ => "scope" }] = _view.Key;
-            var rows = await _sidecar.CallAsync<List<ReminderItem>>("reminders", query);
+            var rows = await _sync.CallAsync<List<ReminderItem>>("reminders", query);
             if (_completing.Count > 0) return;
             var selectedId = _selected?.Id; _reminders.Clear(); foreach (var row in rows) _reminders.Add(row);
             UpdateRows();
@@ -240,7 +240,7 @@ public sealed partial class MainWindow : Window
         if (_demo) return;
         try
         {
-            var status = await _sidecar.CallAsync("sync_status", new { });
+            var status = await _sync.CallAsync("sync_status", new { });
             var conflicts = status.Number("conflicts"); ConflictItem.Visibility = conflicts > 0 ? Visibility.Visible : Visibility.Collapsed; ConflictItem.Content = conflicts == 1 ? "1 sync conflict" : $"{conflicts} sync conflicts";
         }
         catch { }
@@ -250,7 +250,7 @@ public sealed partial class MainWindow : Window
         if (_demo || !_notificationsRegistered) return;
         try
         {
-            var plan = await _sidecar.CallAsync("due_notifications", new { });
+            var plan = await _sync.CallAsync("due_notifications", new { });
             if (!plan.TryGetProperty("toasts", out var toasts)) return;
             foreach (var toast in toasts.EnumerateArray())
             {
@@ -269,18 +269,18 @@ public sealed partial class MainWindow : Window
 
     private async Task RequestAutoSyncAsync()
     {
-        if (_demo || !_sidecar.IsRunning) return;
+        if (_demo || !_sync.IsRunning) return;
         _lastSyncRequest = DateTimeOffset.UtcNow;
-        try { await _sidecar.CallAsync("sync", new { }); }
+        try { await _sync.CallAsync("sync", new { }); }
         catch (Exception error) { ShowInfo("Sync failed", error.Message, InfoBarSeverity.Error); }
     }
 
     private async void SignIn_Click(object sender, RoutedEventArgs e)
     {
         SetGateState("Signing in…");
-        try { await _sidecar.CallAsync("login", new { apple_id = AppleIdBox.Text.Trim(), password = PasswordBox.Password }); PasswordBox.Password = ""; await BootAsync(); }
-        catch (SidecarException error) when (error.Code == "2FA_REQUIRED") { await RequestCodeAsync(); }
-        catch (SidecarException error) when (error.Code == "TERMS_REQUIRED") { await AcceptTermsAsync(); }
+        try { await _sync.CallAsync("login", new { apple_id = AppleIdBox.Text.Trim(), password = PasswordBox.Password }); PasswordBox.Password = ""; await BootAsync(); }
+        catch (SyncException error) when (error.Code == "2FA_REQUIRED") { await RequestCodeAsync(); }
+        catch (SyncException error) when (error.Code == "TERMS_REQUIRED") { await AcceptTermsAsync(); }
         catch (Exception error) { ShowLogin(); GateError.Message = error.Message; GateError.IsOpen = true; }
     }
     private async Task AcceptTermsAsync()
@@ -289,7 +289,7 @@ public sealed partial class MainWindow : Window
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
             SetGateState("Accepting terms…");
-            try { await _sidecar.CallAsync("login", new { apple_id = AppleIdBox.Text.Trim(), password = PasswordBox.Password, accept_terms = true }); PasswordBox.Password = ""; await BootAsync(); }
+            try { await _sync.CallAsync("login", new { apple_id = AppleIdBox.Text.Trim(), password = PasswordBox.Password, accept_terms = true }); PasswordBox.Password = ""; await BootAsync(); }
             catch (Exception error) { ShowLogin(); GateError.Message = error.Message; GateError.IsOpen = true; }
         }
         else ShowLogin();
@@ -311,7 +311,7 @@ public sealed partial class MainWindow : Window
         // Digits only. Apple's own message and the Windows autofill both hand
         // over "123 456", and a stray space is not a wrong code.
         var code = new string(CodeBox.Text.Where(char.IsDigit).ToArray());
-        try { await _sidecar.CallAsync("submit_2fa", new { code }); CodeBox.Text = ""; await BootAsync(); }
+        try { await _sync.CallAsync("submit_2fa", new { code }); CodeBox.Text = ""; await BootAsync(); }
         catch (Exception error) { CodeBox.Text = ""; GateError.Message = error.Message; GateError.IsOpen = true; }
         finally { _verificationBusy = false; SetVerificationControlsEnabled(true); }
     }
@@ -342,7 +342,7 @@ public sealed partial class MainWindow : Window
         CodeBox.Text = "";
         try
         {
-            var sent = await _sidecar.CallAsync("request_2fa", new { method });
+            var sent = await _sync.CallAsync("request_2fa", new { method });
             ShowCodeEntry(sent);
         }
         catch (Exception error)
@@ -419,7 +419,7 @@ public sealed partial class MainWindow : Window
         if (_restoringNavigation) return;
         if (args.IsSettingsSelected) { RestoreNavigationSelection(); return; }
         if (args.SelectedItemContainer?.Tag?.ToString() is not string tag) return;
-        if (tag == "sync") { if (!_demo) await _sidecar.CallAsync("sync", new { }); ShowInfo("Syncing", "Checking iCloud for changes…", InfoBarSeverity.Informational); return; }
+        if (tag == "sync") { if (!_demo) await _sync.CallAsync("sync", new { }); ShowInfo("Syncing", "Checking iCloud for changes…", InfoBarSeverity.Informational); return; }
         if (tag == "conflicts") { await ResolveConflictsAsync(); return; }
         var split = tag.Split(':', 2); if (split.Length != 2) return;
         _view = new(args.SelectedItemContainer.Content?.ToString() ?? "Reminders", "", split[0] switch { "list" => NavKind.List, "tag" => NavKind.Tag, _ => NavKind.Smart }, split[1]);
@@ -430,18 +430,57 @@ public sealed partial class MainWindow : Window
     {
         if (_initializingPane) return;
         if (_temporaryPaneTarget is true) { _temporaryPaneTarget = null; return; }
-        _hoverExpanded = false;
-        _panePinnedOpen = true;
-        if (!_demo) UiPreferences.SaveNavigationPaneOpen(true);
+        if (!_panePinnedOpen) _hoverExpanded = true;
     }
 
-    private void Navigation_PaneClosing(NavigationView sender, object args)
+    private void Navigation_PaneClosing(NavigationView sender, NavigationViewPaneClosingEventArgs args)
     {
         if (_initializingPane) return;
+        // A delayed light-dismiss from the compact view can arrive after the
+        // pin action. It must not undo the user's explicit choice.
+        if (_panePinnedOpen) { args.Cancel = true; return; }
         if (_temporaryPaneTarget is false) { _temporaryPaneTarget = null; _hoverExpanded = false; return; }
         _hoverExpanded = false;
-        _panePinnedOpen = false;
-        if (!_demo) UiPreferences.SaveNavigationPaneOpen(false);
+    }
+
+    private void SetPanePinned(bool pinned, bool persist = true)
+    {
+        _paneHoverOpenTimer.Stop();
+        _paneHoverCloseTimer.Stop();
+        _hoverExpanded = false;
+        _temporaryPaneTarget = null;
+        _panePinnedOpen = pinned;
+        // Left reserves space for the pinned sidebar instead of opening an
+        // overlay that NavigationView dismisses when a list is selected.
+        var wasInitializing = _initializingPane;
+        _initializingPane = true;
+        try
+        {
+            Navigation.PaneDisplayMode = pinned ? NavigationViewPaneDisplayMode.Left : NavigationViewPaneDisplayMode.LeftCompact;
+            Navigation.IsPaneToggleButtonVisible = true;
+            Navigation.IsPaneOpen = pinned;
+        }
+        finally { _initializingPane = wasInitializing; }
+        if (persist && !_demo) UiPreferences.SaveNavigationPaneOpen(pinned);
+    }
+
+    private void Navigation_Loaded(object sender, RoutedEventArgs e)
+    {
+        // Click is not a routed event in WinUI. Attach to the template's native
+        // hamburger so mouse, keyboard, and automation all use the same action.
+        var pending = new Stack<DependencyObject>();
+        pending.Push(Navigation);
+        while (pending.TryPop(out var source))
+        {
+            if (source is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase { Name: "TogglePaneButton" } toggle)
+            {
+                toggle.Click += (_, _) => SetPanePinned(!_panePinnedOpen);
+                Navigation.Loaded -= Navigation_Loaded;
+                return;
+            }
+            for (var child = 0; child < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(source); child++)
+                pending.Push(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(source, child));
+        }
     }
 
     private void Navigation_PointerMoved(object sender, PointerRoutedEventArgs e)
@@ -500,7 +539,7 @@ public sealed partial class MainWindow : Window
         var saved = false;
         try
         {
-            if (!_demo) await _sidecar.CallAsync("update_reminder", new { id = reminder.Id, completed });
+            if (!_demo) await _sync.CallAsync("update_reminder", new { id = reminder.Id, completed });
             saved = true;
             if (completed) await AnimateCompletionAsync(reminder);
             _completing.Remove(reminder.Id);
@@ -550,7 +589,7 @@ public sealed partial class MainWindow : Window
                 _selected.DueDate = due; _selected.AllDay = DetailAllDay.IsOn;
                 _selected.Flagged = DetailFlagged.IsOn; _selected.Priority = priority;
             }
-            else await _sidecar.CallAsync("update_reminder", new { id = _selected.Id, title = DetailTitle.Text.Trim(), description = DetailNotes.Text, due_date = due, all_day = DetailAllDay.IsOn, flagged = DetailFlagged.IsOn, priority });
+            else await _sync.CallAsync("update_reminder", new { id = _selected.Id, title = DetailTitle.Text.Trim(), description = DetailNotes.Text, due_date = due, all_day = DetailAllDay.IsOn, flagged = DetailFlagged.IsOn, priority });
             SaveButton.IsEnabled = false; await LoadRemindersAsync();
         }
         catch (Exception error) { ShowInfo("Couldn't save reminder", error.Message, InfoBarSeverity.Error); }
@@ -560,7 +599,7 @@ public sealed partial class MainWindow : Window
         if (_selected is null) return;
         var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, Title = "Delete reminder?", Content = _selected.DisplayTitle, PrimaryButtonText = "Delete", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-        if (_demo) _selected.Deleted = true; else await _sidecar.CallAsync("delete_reminder", new { id = _selected.Id }); ShowDetail(null); await LoadRemindersAsync();
+        if (_demo) _selected.Deleted = true; else await _sync.CallAsync("delete_reminder", new { id = _selected.Id }); ShowDetail(null); await LoadRemindersAsync();
     }
 
     private async void Add_Click(object sender, RoutedEventArgs e) => await ShowNewReminderAsync();
@@ -569,8 +608,8 @@ public sealed partial class MainWindow : Window
     private async void SettingsAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; await ShowSettingsAsync(); }
     private async Task ResolveConflictsAsync()
     {
-        if (_demo) return; var conflicts = await _sidecar.CallAsync<List<ConflictItem>>("conflicts", new { });
-        foreach (var conflict in conflicts) { var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, Title = "Resolve sync conflict", Content = "Keep the version edited on this PC, or the current iCloud version?", PrimaryButtonText = "Keep this PC", SecondaryButtonText = "Keep iCloud", CloseButtonText = "Later" }; var result = await dialog.ShowAsync(); if (result == ContentDialogResult.None) break; await _sidecar.CallAsync("resolve_conflict", new { id = conflict.Id, keep = result == ContentDialogResult.Primary ? "local" : "remote" }); }
+        if (_demo) return; var conflicts = await _sync.CallAsync<List<ConflictItem>>("conflicts", new { });
+        foreach (var conflict in conflicts) { var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, Title = "Resolve sync conflict", Content = "Keep the version edited on this PC, or the current iCloud version?", PrimaryButtonText = "Keep this PC", SecondaryButtonText = "Keep iCloud", CloseButtonText = "Later" }; var result = await dialog.ShowAsync(); if (result == ContentDialogResult.None) break; await _sync.CallAsync("resolve_conflict", new { id = conflict.Id, keep = result == ContentDialogResult.Primary ? "local" : "remote" }); }
         await RefreshAllAsync();
     }
     private void ApplyTheme(string theme) => Root.RequestedTheme = theme switch { "dark" => ElementTheme.Dark, "light" => ElementTheme.Light, _ => ElementTheme.Default };
@@ -591,7 +630,7 @@ public sealed partial class MainWindow : Window
                 if (manual) { UpdateInfoBar.Title = "You're up to date"; UpdateInfoBar.Message = "No newer stable release is available."; UpdateInfoBar.IsOpen = true; UpdateButton.Visibility = Visibility.Collapsed; }
                 return;
             }
-            UpdateInfoBar.Title = $"Reminders {_availableUpdate.Version} is available";
+            UpdateInfoBar.Title = $"Cloud Reminder Sync {_availableUpdate.Version} is available";
             UpdateInfoBar.Message = AppUpdater.CanInstall ? "Install the update and restart when you're ready. Your reminders and sign-in will be kept." : "Download the new release from GitHub for this portable or packaged build.";
             UpdateButton.Content = AppUpdater.CanInstall ? "Install and restart" : "Open releases";
             UpdateButton.Visibility = Visibility.Visible;
@@ -619,7 +658,7 @@ public sealed partial class MainWindow : Window
         UpdateButton.IsEnabled = false;
         try
         {
-            var confirmation = new ContentDialog { XamlRoot = Root.XamlRoot, Title = "Install update?", Content = "Reminders will close while the update installs, then reopen. Save any unfinished reminder edits first.", PrimaryButtonText = "Install and restart", CloseButtonText = "Later" };
+            var confirmation = new ContentDialog { XamlRoot = Root.XamlRoot, Title = "Install update?", Content = "Cloud Reminder Sync will close while the update installs, then reopen. Save any unfinished reminder edits first.", PrimaryButtonText = "Install and restart", CloseButtonText = "Later" };
             if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
             UpdateInfoBar.Title = "Downloading update";
             // Progress<T> does not rely on a WinUI SynchronizationContext.
@@ -630,8 +669,8 @@ public sealed partial class MainWindow : Window
             _updateLifetime.Token.ThrowIfCancellationRequested();
             Navigation.IsEnabled = false;
             _statusTimer.Stop(); _notificationTimer.Stop(); _syncTimer.Stop();
-            _sidecarDisposedForUpdate = true;
-            await _sidecar.DisposeAsync();
+            _syncDisposedForUpdate = true;
+            await _sync.DisposeAsync();
             _updateLifetime.Token.ThrowIfCancellationRequested();
             AppUpdater.LaunchInstaller(installer);
             Close();
@@ -641,25 +680,24 @@ public sealed partial class MainWindow : Window
         {
             AppLog.Error("Could not install update", error);
             UpdateInfoBar.Title = "Could not install update"; UpdateInfoBar.Message = error.Message;
-            if (_sidecarDisposedForUpdate)
+            if (_syncDisposedForUpdate)
             {
-                _sidecar = new SidecarClient(); AttachSidecarEvents();
-                _sidecarDisposedForUpdate = false; await BootAsync();
+                _sync = new SyncClient(); AttachSyncEvents();
+                _syncDisposedForUpdate = false; await BootAsync();
             }
         }
         finally { _updateBusy = false; _dialogOpen = false; UpdateButton.IsEnabled = true; Navigation.IsEnabled = true; }
     }
 
-    private void AttachSidecarEvents()
+    private void AttachSyncEvents()
     {
-        _sidecar.EventReceived += Sidecar_EventReceived;
-        _sidecar.Stopped += (_, reason) => DispatcherQueue.TryEnqueue(() => ShowInfo("Sync service stopped", reason, InfoBarSeverity.Error));
+        _sync.EventReceived += Sync_EventReceived;
     }
     private void ShowInfo(string title, string message, InfoBarSeverity severity) { AppInfoBar.Title = title; AppInfoBar.Message = message; AppInfoBar.Severity = severity; AppInfoBar.IsOpen = true; }
 
-    private void Sidecar_EventReceived(object? sender, SidecarEventArgs e) => DispatcherQueue.TryEnqueue(async () =>
+    private void Sync_EventReceived(object? sender, SyncEventArgs e) => DispatcherQueue.TryEnqueue(async () =>
     {
-        if (_sidecarDisposedForUpdate || _updateLifetime.IsCancellationRequested) return;
+        if (_syncDisposedForUpdate || _updateLifetime.IsCancellationRequested) return;
         switch (e.Name)
         {
             case "ready": await BootAsync(); break;
@@ -690,6 +728,6 @@ public sealed partial class MainWindow : Window
         _statusTimer.Stop(); _notificationTimer.Stop(); _syncTimer.Stop(); _paneHoverOpenTimer.Stop(); _paneHoverCloseTimer.Stop();
         _updateTimer.Stop(); _updateLifetime.Cancel();
         if (_notificationsRegistered) { try { AppNotificationManager.Default.Unregister(); } catch { } }
-        if (!_sidecarDisposedForUpdate) await _sidecar.DisposeAsync();
+        if (!_syncDisposedForUpdate) await _sync.DisposeAsync();
     }
 }

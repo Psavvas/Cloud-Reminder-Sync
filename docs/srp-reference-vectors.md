@@ -1,19 +1,19 @@
 # SRP reference vectors
 
-The sign-in path in `sidecar/src/auth.rs` reimplements Apple's web SRP
-handshake in Rust. The implementation it replaced delegated that handshake to
+The sign-in path in `src-windows/Reminders.Core/Srp.cs` reimplements Apple's web SRP
+handshake in C#. The implementation it replaced delegated that handshake to
 [pyicloud], which in turn uses the [srp] package. pyicloud is the only version
 of this flow known to work against Apple in production, so it — not this
 codebase — is the reference.
 
-The vectors in `auth.rs`'s test module are generated from that reference rather
+The vectors in `src-windows/Reminders.Core.Tests/Program.cs` are generated from that reference rather
 than from our own output. A test that asserts an implementation's own result
 proves only that it is deterministic; it passes just as happily when the
 construction is wrong.
 
 ## What the reference pins down
 
-Running pyicloud's stack confirmed four things the Rust code gets right, each
+Running pyicloud's stack confirmed four things the C# code preserves, each
 of which would silently break sign-in if changed:
 
 - `srp.no_username_in_x()` — `x = H(salt || H(":" || derived))`, with the
@@ -24,7 +24,7 @@ of which would silently break sign-in if changed:
   correct, not a transcription error.
 - `A`, `B`, `S` are hashed as minimal big-endian integers (leading zero bytes
   stripped) when computing M1, M2 and the session key `K` — matching
-  `BigUint::to_bytes_be`.
+  `BigInteger.ToByteArray(true, true)`.
 
 ## Known divergence: salts beginning with `0x00`
 
@@ -90,7 +90,7 @@ for proto in (m.SrpProtocolType.S2K, m.SrpProtocolType.S2K_FO):
 ```
 
 `bytes_a` fixes the client private exponent so the handshake is reproducible;
-`auth.rs` passes the same value into `make_proof`.
+`Srp.cs` receives the same value in `Srp.Proof`.
 
 ## Still not covered
 
@@ -98,7 +98,7 @@ These vectors validate the cryptography. They say nothing about the surrounding
 flow — cookie and header capture across `signin/init` and `signin/complete`,
 2FA and trust-token handling, or `accountLogin` session restoration. Those need
 a disposable Apple account, and remain the largest untested surface in the
-sidecar.
+backend.
 
 [pyicloud]: https://github.com/timlaing/pyicloud
 [srp]: https://pypi.org/project/srp/

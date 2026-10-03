@@ -20,11 +20,16 @@ cookies/
 sidecar/target/
 src-windows/**/bin/
 src-windows/**/obj/
+src-windows/**/publish/
+.vs/
+*.user
+dist-installer/
 dist-sidecar/*
 !dist-sidecar/README.md
 dist-windows/
 dist-windows-arm64/
 dist-msix/
+dist-store/
 
 # Local tooling
 node_modules/

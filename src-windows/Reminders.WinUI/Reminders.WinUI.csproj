@@ -14,19 +14,21 @@
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <RuntimeIdentifier Condition="'$(Platform)' == 'x64'">win-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="'$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifiers Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</RuntimeIdentifiers>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <NuGetLockFilePath>packages.$(RuntimeIdentifier).lock.json</NuGetLockFilePath>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.3.0</Version>
-    <Product>Reminders for Windows</Product>
+    <Version>0.4.0</Version>
+    <Product>Cloud Reminder Sync</Product>
     <Authors>Paul Savvas</Authors>
     <Company>paulsavvas.com</Company>
     <Description>An independent native Windows client compatible with Apple iCloud Reminders.</Description>
     <PackageProjectUrl>https://paulsavvas.com</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Psavvas/iCloud-Reminders-for-Windows</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Psavvas/Cloud-Reminder-Sync</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Reminders.Core\Reminders.Core.csproj" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.1.3" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
   </ItemGroup>

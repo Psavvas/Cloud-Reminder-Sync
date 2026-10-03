@@ -45,7 +45,7 @@ public sealed class ReminderItem : INotifyPropertyChanged
             if (AllDay) return due.Date == DateTime.Today ? "Today" : due.ToString("ddd, MMM d");
             if (due.Date == DateTime.Today) return $"Today, {due:t}";
             if (due.Date == DateTime.Today.AddDays(1)) return $"Tomorrow, {due:t}";
-            return due.ToString("ddd, MMM d · t");
+            return $"{due:ddd, MMM d} · {due:t}";
         }
     }
     [JsonIgnore] public string Metadata
@@ -81,7 +81,13 @@ public sealed class ConflictItem
     [JsonPropertyName("reminder_id")] public string ReminderId { get; set; } = "";
 }
 
-public sealed class SidecarException(string code, string message, string detail = "") : Exception(message)
+public sealed class ReminderTag
+{
+    [JsonPropertyName("name")] public string Name { get; set; } = "";
+    [JsonPropertyName("n")] public long Count { get; set; }
+}
+
+public sealed class SyncException(string code, string message, string detail = "") : Exception(message)
 {
     public string Code { get; } = code;
     public string Detail { get; } = detail;

@@ -1,3 +1,13 @@
+> Migration note (October 1, 2026): the Rust backend has been ported to
+> src-windows/Reminders.Core and integrated into the WinUI process. The audit
+> below is historical; Rust paths, child-process controls and Cargo commands
+> describe the previous implementation. Current verification uses the
+> Reminders.Core.Tests console project and WinUI/MSIX builds. The port preserves
+> Credential Manager targets/session chunking, SQLite schema, SRP vectors,
+> bounded HTTP responses/pagination, and durable outbox/conflict handling.
+> Live Apple interoperability and signed MSIX installation still need a
+> disposable account/test device.
+
 # Security audit
 
 Date: 2026-08-09
