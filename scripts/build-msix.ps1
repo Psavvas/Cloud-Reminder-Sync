@@ -5,14 +5,27 @@ param(
     [ValidatePattern('^[A-Za-z0-9.-]{3,50}$')]
     [string]$IdentityName = 'RemindersForWindows',
     [string]$Publisher = 'CN=paulsavvas.com',
+    [string]$PublisherDisplayName,
     [string]$CertificateThumbprint,
+    [switch]$Store,
     [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Store) {
+    foreach ($requiredIdentity in @('IdentityName', 'Publisher', 'PublisherDisplayName')) {
+        if (-not $PSBoundParameters.ContainsKey($requiredIdentity) -or [string]::IsNullOrWhiteSpace($PSBoundParameters[$requiredIdentity])) {
+            throw "Store submissions require -$requiredIdentity from Partner Center > Product identity."
+        }
+    }
+    if ($CertificateThumbprint) { throw 'Store submissions are signed by Microsoft. Omit -CertificateThumbprint.' }
+    if ($Publisher -notmatch '^CN=' -or $Publisher.Contains('OID.2.25.311729368913984317654407730594956997722')) {
+        throw 'Use the exact Package/Identity/Publisher assigned by Partner Center for Store submission.'
+    }
+}
 $repository = Split-Path -Parent $PSScriptRoot
 $portableOutput = if ($Architecture -eq 'ARM64') { Join-Path $repository 'dist-windows-arm64' } else { Join-Path $repository 'dist-windows' }
-$packageOutput = Join-Path $repository 'dist-msix'
+$packageOutput = Join-Path $repository $(if ($Store) { 'dist-store' } else { 'dist-msix' })
 $project = Join-Path $repository 'src-windows\Reminders.WinUI\Reminders.WinUI.csproj'
 $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
 $makeAppx = Get-ChildItem $sdkRoot -Recurse -Filter makeappx.exe -ErrorAction SilentlyContinue |
@@ -50,6 +63,7 @@ try {
     $manifestXml.Package.Identity.SetAttribute('Publisher', $Publisher)
     $manifestXml.Package.Identity.SetAttribute('Version', $packageVersion)
     $manifestXml.Package.Identity.SetAttribute('ProcessorArchitecture', $processorArchitecture)
+    if ($Store) { $manifestXml.Package.Properties.PublisherDisplayName = $PublisherDisplayName }
     $manifestXml.Package.Applications.Application.SetAttribute('Executable', 'Reminders.exe')
     $manifestXml.Package.Applications.Application.SetAttribute('EntryPoint', 'Windows.FullTrustApplication')
     $manifestXml.Save((Join-Path $staging 'AppxManifest.xml'))
@@ -65,6 +79,9 @@ try {
         if (-not $signTool) { throw 'SignTool.exe was not found in the installed Windows SDK.' }
         & $signTool.FullName sign /sha1 $CertificateThumbprint /fd SHA256 $package
         if ($LASTEXITCODE -ne 0) { throw 'SignTool failed to sign the MSIX package.' }
+    }
+    elseif ($Store) {
+        Write-Host 'Store submission package created. Upload it to Partner Center; Microsoft signs the approved distribution. This file is not a trusted installer yet.'
     }
     else {
         Write-Warning 'The MSIX is unsigned. Sign it with -CertificateThumbprint or submit it to the Microsoft Store before installation.'

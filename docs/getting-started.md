@@ -40,6 +40,11 @@ executable override or sidecar process.
 
 ## MSIX distribution
 
+For public distribution without asking users to trust a development certificate,
+use the [Microsoft Store submission workflow](microsoft-store.md). Microsoft signs
+the approved app; `build-msix.ps1 -Store` prepares packages using your assigned
+Partner Center identity and writes them to `dist-store`.
+
 ```powershell
 .\scripts\check-prereqs.ps1 -Msix
 .\scripts\build-msix.ps1 -Architecture x64

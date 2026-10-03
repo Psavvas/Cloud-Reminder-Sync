@@ -29,6 +29,7 @@ dist-sidecar/*
 dist-windows/
 dist-windows-arm64/
 dist-msix/
+dist-store/
 
 # Local tooling
 node_modules/
