@@ -45,7 +45,7 @@ public sealed class ReminderItem : INotifyPropertyChanged
             if (AllDay) return due.Date == DateTime.Today ? "Today" : due.ToString("ddd, MMM d");
             if (due.Date == DateTime.Today) return $"Today, {due:t}";
             if (due.Date == DateTime.Today.AddDays(1)) return $"Tomorrow, {due:t}";
-            return due.ToString("ddd, MMM d · t");
+            return $"{due:ddd, MMM d} · {due:t}";
         }
     }
     [JsonIgnore] public string Metadata

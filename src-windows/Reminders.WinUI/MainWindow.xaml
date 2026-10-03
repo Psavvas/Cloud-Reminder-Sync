@@ -73,13 +73,6 @@
     </Grid>
    </Grid>
   </NavigationView>
-  <!-- Keep the pin in the sidebar's title row without adding a menu row.
-       The transparent host lets pointer events reach the navigation beneath. -->
-  <Grid x:Name="SidebarPinHeader" Width="{x:Bind Navigation.OpenPaneLength}" Height="48" HorizontalAlignment="Left" VerticalAlignment="Top">
-   <ToggleButton x:Name="SidebarPinButton" Width="28" Height="28" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0" Padding="5" Background="Transparent" BorderThickness="0" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Click="SidebarPin_Click" PointerEntered="NavigationPaneItem_PointerEntered" PointerExited="NavigationPaneItem_PointerExited" AutomationProperties.Name="Pin sidebar open" ToolTipService.ToolTip="Pin sidebar open">
-    <FontIcon Glyph="&#xE718;" FontSize="14"/>
-   </ToggleButton>
-  </Grid>
 
   <Grid x:Name="AuthGate" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="36" Width="430" HorizontalAlignment="Center" VerticalAlignment="Center">

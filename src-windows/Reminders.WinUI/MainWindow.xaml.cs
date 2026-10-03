@@ -60,6 +60,7 @@ public sealed partial class MainWindow : Window
         Root.KeyboardAccelerators.Add(settingsAccelerator);
         Navigation.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(Navigation_PointerMoved), true);
         Navigation.AddHandler(UIElement.PointerExitedEvent, new PointerEventHandler(Navigation_PointerExited), true);
+        Navigation.Loaded += Navigation_Loaded;
         foreach (var item in Navigation.MenuItems.Concat(Navigation.FooterMenuItems).OfType<NavigationViewItem>()) AttachPaneHover(item);
         ReminderList.ItemsSource = _reminders;
         DetailPriority.SelectedIndex = 0;
@@ -427,7 +428,6 @@ public sealed partial class MainWindow : Window
 
     private void Navigation_PaneOpening(NavigationView sender, object args)
     {
-        SidebarPinHeader.Visibility = Visibility.Visible;
         if (_initializingPane) return;
         if (_temporaryPaneTarget is true) { _temporaryPaneTarget = null; return; }
         if (!_panePinnedOpen) _hoverExpanded = true;
@@ -439,7 +439,6 @@ public sealed partial class MainWindow : Window
         // A delayed light-dismiss from the compact view can arrive after the
         // pin action. It must not undo the user's explicit choice.
         if (_panePinnedOpen) { args.Cancel = true; return; }
-        SidebarPinHeader.Visibility = Visibility.Collapsed;
         if (_temporaryPaneTarget is false) { _temporaryPaneTarget = null; _hoverExpanded = false; return; }
         _hoverExpanded = false;
     }
@@ -458,19 +457,31 @@ public sealed partial class MainWindow : Window
         try
         {
             Navigation.PaneDisplayMode = pinned ? NavigationViewPaneDisplayMode.Left : NavigationViewPaneDisplayMode.LeftCompact;
-            Navigation.IsPaneToggleButtonVisible = !pinned;
+            Navigation.IsPaneToggleButtonVisible = true;
             Navigation.IsPaneOpen = pinned;
         }
         finally { _initializingPane = wasInitializing; }
-        var action = pinned ? "Unpin sidebar" : "Pin sidebar open";
-        SidebarPinButton.IsChecked = pinned;
-        SidebarPinHeader.Visibility = pinned ? Visibility.Visible : Visibility.Collapsed;
-        ToolTipService.SetToolTip(SidebarPinButton, action);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SidebarPinButton, action);
         if (persist && !_demo) UiPreferences.SaveNavigationPaneOpen(pinned);
     }
 
-    private void SidebarPin_Click(object sender, RoutedEventArgs e) => SetPanePinned(SidebarPinButton.IsChecked == true);
+    private void Navigation_Loaded(object sender, RoutedEventArgs e)
+    {
+        // Click is not a routed event in WinUI. Attach to the template's native
+        // hamburger so mouse, keyboard, and automation all use the same action.
+        var pending = new Stack<DependencyObject>();
+        pending.Push(Navigation);
+        while (pending.TryPop(out var source))
+        {
+            if (source is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase { Name: "TogglePaneButton" } toggle)
+            {
+                toggle.Click += (_, _) => SetPanePinned(!_panePinnedOpen);
+                Navigation.Loaded -= Navigation_Loaded;
+                return;
+            }
+            for (var child = 0; child < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(source); child++)
+                pending.Push(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(source, child));
+        }
+    }
 
     private void Navigation_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
