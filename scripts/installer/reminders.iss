@@ -33,8 +33,8 @@ AppVersion={#AppVersion}
 AppVerName=Cloud Reminder Sync {#AppVersion}
 AppPublisher=paulsavvas.com
 AppPublisherURL=https://paulsavvas.com
-AppSupportURL=https://github.com/Psavvas/iCloud-Reminders-for-Windows/issues
-AppUpdatesURL=https://github.com/Psavvas/iCloud-Reminders-for-Windows/releases
+AppSupportURL=https://github.com/Psavvas/Cloud-Reminder-Sync/issues
+AppUpdatesURL=https://github.com/Psavvas/Cloud-Reminder-Sync/releases
 VersionInfoVersion={#AppVersion}
 
 ; Per-user install: no UAC prompt, and it matches where the app already keeps
