@@ -1,7 +1,7 @@
 <div align="center">
 <img src="src-windows/Reminders.WinUI/Assets/icon-v2.png" width="112" alt="Reminders app icon">
 
-# iCloud Reminders for Windows
+# Cloud Reminder Sync
 
 **A native WinUI 3 client for iCloud Reminders, written in C#/.NET.**
 </div>

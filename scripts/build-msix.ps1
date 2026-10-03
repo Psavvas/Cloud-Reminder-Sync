@@ -12,18 +12,21 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$repository = Split-Path -Parent $PSScriptRoot
 if ($Store) {
-    foreach ($requiredIdentity in @('IdentityName', 'Publisher', 'PublisherDisplayName')) {
-        if (-not $PSBoundParameters.ContainsKey($requiredIdentity) -or [string]::IsNullOrWhiteSpace($PSBoundParameters[$requiredIdentity])) {
-            throw "Store submissions require -$requiredIdentity from Partner Center > Product identity."
-        }
+    [xml]$storeManifest = Get-Content -LiteralPath (Join-Path $repository 'src-windows/Reminders.Package/Package.appxmanifest') -Raw
+    if (-not $PSBoundParameters.ContainsKey('IdentityName')) { $IdentityName = $storeManifest.Package.Identity.Name }
+    if (-not $PSBoundParameters.ContainsKey('Publisher')) { $Publisher = $storeManifest.Package.Identity.Publisher }
+    if (-not $PSBoundParameters.ContainsKey('PublisherDisplayName')) { $PublisherDisplayName = $storeManifest.Package.Properties.PublisherDisplayName }
+    if ([string]::IsNullOrWhiteSpace($IdentityName) -or $IdentityName -eq 'RemindersForWindows' -or
+        [string]::IsNullOrWhiteSpace($PublisherDisplayName) -or $Publisher -eq 'CN=paulsavvas.com') {
+        throw 'Store submissions require the assigned Partner Center identity in Package.appxmanifest or explicit identity parameters.'
     }
     if ($CertificateThumbprint) { throw 'Store submissions are signed by Microsoft. Omit -CertificateThumbprint.' }
     if ($Publisher -notmatch '^CN=' -or $Publisher.Contains('OID.2.25.311729368913984317654407730594956997722')) {
         throw 'Use the exact Package/Identity/Publisher assigned by Partner Center for Store submission.'
     }
 }
-$repository = Split-Path -Parent $PSScriptRoot
 $portableOutput = if ($Architecture -eq 'ARM64') { Join-Path $repository 'dist-windows-arm64' } else { Join-Path $repository 'dist-windows' }
 $packageOutput = Join-Path $repository $(if ($Store) { 'dist-store' } else { 'dist-msix' })
 $project = Join-Path $repository 'src-windows\Reminders.WinUI\Reminders.WinUI.csproj'

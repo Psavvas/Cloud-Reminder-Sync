@@ -19,24 +19,25 @@ replacing an existing installation.
 
 ## Build submission packages
 
-Run these commands from the repository root, replacing the placeholders with the
-Partner Center values. These identity values are public metadata, not credentials.
+The checked-in manifest now uses the reserved app's Partner Center identity:
+
+- Name: `PaulSavvas.CloudReminderSync`
+- Publisher: `CN=3E985065-3B5B-4175-965A-08CB432B2EFB`
+- PublisherDisplayName: `Paul Savvas`
+
+These values are public metadata, not credentials. Run from the repository root:
 
 ```powershell
-$storeIdentity = @{
-    Store = $true
-    IdentityName = 'PACKAGE_IDENTITY_NAME_FROM_PARTNER_CENTER'
-    Publisher = 'CN=PUBLISHER_ID_FROM_PARTNER_CENTER'
-    PublisherDisplayName = 'PUBLISHER_DISPLAY_NAME_FROM_PARTNER_CENTER'
-}
-.\scripts\build-msix.ps1 -Architecture x64 @storeIdentity
-.\scripts\build-msix.ps1 -Architecture ARM64 @storeIdentity
+.\scripts\build-msix.ps1 -Architecture x64 -Store
+.\scripts\build-msix.ps1 -Architecture ARM64 -Store
 ```
 
 Upload both `.msix` files from `dist-store` on the submission's **Packages** page.
 Partner Center accepts individual MSIX packages and selects the matching
-architecture for each customer's device. The build leaves the development manifest
-unchanged and keeps submission files separate from sideloading outputs.
+architecture for each customer's device. Store builds read the assigned identity
+from the manifest and keep submission files separate from sideloading outputs.
+Explicit identity parameters remain available for another reservation. Ordinary
+non-Store command-line builds retain the legacy development identity by default.
 
 Alternatively, associate **Reminders.Package** with your app in Visual Studio and
 use **Publish → Create App Packages → Microsoft Store**. The wizard can create a

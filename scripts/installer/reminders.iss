@@ -1,4 +1,4 @@
-; Inno Setup script for iCloud Reminders.
+; Inno Setup script for Cloud Reminder Sync.
 ;
 ; The app is built unpackaged and self-contained (WindowsPackageType=None,
 ; WindowsAppSDKSelfContained=true), so installing is genuinely just laying down
@@ -28,9 +28,9 @@
 ; A stable GUID keeps upgrades in place instead of stacking side-by-side
 ; entries in Apps & Features. Never change it for this product.
 AppId={{7C4E1E2A-9F3B-4D5C-8A61-2B0E7F9C4A13}
-AppName=iCloud Reminders
+AppName=Cloud Reminder Sync
 AppVersion={#AppVersion}
-AppVerName=iCloud Reminders {#AppVersion}
+AppVerName=Cloud Reminder Sync {#AppVersion}
 AppPublisher=paulsavvas.com
 AppPublisherURL=https://paulsavvas.com
 AppSupportURL=https://github.com/Psavvas/iCloud-Reminders-for-Windows/issues
@@ -43,7 +43,7 @@ VersionInfoVersion={#AppVersion}
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 DefaultDirName={autopf}\Reminders for Windows
-DefaultGroupName=iCloud Reminders
+DefaultGroupName=Cloud Reminder Sync
 DisableProgramGroupPage=yes
 AllowNoIcons=yes
 
@@ -51,7 +51,7 @@ OutputDir={#OutputDir}
 OutputBaseFilename=Reminders-for-Windows-{#Arch}-Setup
 SetupIconFile={#IconFile}
 UninstallDisplayIcon={app}\Reminders.exe
-UninstallDisplayName=iCloud Reminders
+UninstallDisplayName=Cloud Reminder Sync
 
 ; The app holds the SQLite cache open, so an upgrade over a running install
 ; would otherwise fail on locked binaries. Restart Manager asks the running
@@ -82,7 +82,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "startup"; Description: "Start iCloud Reminders when I sign in"; GroupDescription: "Startup"; Flags: unchecked
+Name: "startup"; Description: "Start Cloud Reminder Sync when I sign in"; GroupDescription: "Startup"; Flags: unchecked
 
 [Files]
 ; Install the complete self-contained app, including the C# backend library.
@@ -94,15 +94,19 @@ Type: files; Name: "{autoprograms}\Reminders for Windows\Reminders for Windows.l
 Type: files; Name: "{autoprograms}\Reminders for Windows\{cm:UninstallProgram,Reminders for Windows}.lnk"
 Type: files; Name: "{autodesktop}\Reminders for Windows.lnk"
 Type: files; Name: "{userstartup}\Reminders for Windows.lnk"
+Type: files; Name: "{autoprograms}\iCloud Reminders\iCloud Reminders.lnk"
+Type: files; Name: "{autoprograms}\iCloud Reminders\{cm:UninstallProgram,iCloud Reminders}.lnk"
+Type: files; Name: "{autodesktop}\iCloud Reminders.lnk"
+Type: files; Name: "{userstartup}\iCloud Reminders.lnk"
 
 [Icons]
-Name: "{group}\iCloud Reminders"; Filename: "{app}\Reminders.exe"
-Name: "{group}\{cm:UninstallProgram,iCloud Reminders}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\iCloud Reminders"; Filename: "{app}\Reminders.exe"; Tasks: desktopicon
-Name: "{userstartup}\iCloud Reminders"; Filename: "{app}\Reminders.exe"; Tasks: startup
+Name: "{group}\Cloud Reminder Sync"; Filename: "{app}\Reminders.exe"
+Name: "{group}\{cm:UninstallProgram,Cloud Reminder Sync}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\Cloud Reminder Sync"; Filename: "{app}\Reminders.exe"; Tasks: desktopicon
+Name: "{userstartup}\Cloud Reminder Sync"; Filename: "{app}\Reminders.exe"; Tasks: startup
 
 [Run]
-Filename: "{app}\Reminders.exe"; Description: "{cm:LaunchProgram,iCloud Reminders}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Reminders.exe"; Description: "{cm:LaunchProgram,Cloud Reminder Sync}"; Flags: nowait postinstall skipifsilent
 Filename: "{app}\Reminders.exe"; Flags: nowait; Check: IsAppUpdate
 
 [INI]
