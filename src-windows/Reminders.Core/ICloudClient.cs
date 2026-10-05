@@ -78,9 +78,17 @@ internal sealed class ICloudClient : IDisposable
     }
     public async Task<Dictionary<string, JsonArray>> Tags(IEnumerable<string> ids, CancellationToken token)
     {
-        var included = ids.ToHashSet(); var result = new Dictionary<string, JsonArray>(); var records = await Cloud.Query("Hashtag", new(), token);
+        // Hashtag is not queryable through records/query in the Reminders service.
+        // Read the zone change stream, which also includes deleted tag records.
+        var included = ids.ToHashSet(); var result = new Dictionary<string, JsonArray>();
+        if (included.Count == 0) return result;
+        var (records, _) = await Cloud.Changes(null, ["Hashtag"], token);
+        var latest = new Dictionary<string, JsonObject>();
         foreach (var r in records.OfType<JsonObject>())
+            if (r.Text("recordName") is { Length: > 0 } recordName) latest[recordName] = r;
+        foreach (var r in latest.Values)
         {
+            if (r.Text("recordType") != "Hashtag" || r.Flag("deleted") || r.Text("reason") == "deleted") continue;
             var id = CloudKit.Field(r, "Reminder").Text("recordName"); var name = CloudKit.Text(r, "Name");
             if (id is null || !included.Contains(id) || name is null || CloudKit.Int(r, "Deleted") != 0) continue;
             if (!result.TryGetValue(id, out var tags)) result[id] = tags = new(); tags.Add(J.Node(new { id = r.Text("recordName"), name, reminder_id = id }));

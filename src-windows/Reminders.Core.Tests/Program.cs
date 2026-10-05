@@ -151,12 +151,17 @@ using (var auth = new AppleAuth(J.Node(new { webservices = new { ckdatabasews = 
     await Error(() => new CloudKit(auth).Query("Hashtag", new(), default), "ERROR", "pagination repeated marker");
 using (var auth = new AppleAuth(J.Node(new { webservices = new { ckdatabasews = new { url = "https://evil.example" } } }).AsObject()))
     await Error(() => new CloudKit(auth).Query("Hashtag", new(), default), "ERROR", "unsafe service endpoint");
+using (var auth = new AppleAuth(J.Node(new { webservices = new { ckdatabasews = new { url = "https://p01.icloud.com" } } }).AsObject(), () => new ResponseHandler(() => new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("{\"reason\":\"record type is not queryable\"}") })))
+{
+    try { await new CloudKit(auth).Query("Hashtag", new(), default); throw new Exception("expected query rejection"); }
+    catch (CoreException ex) { Equal("ERROR", ex.Code, "HTTP 400 is a request rejection"); Check(ex.Message.Contains("HTTP 400") && ex.Detail.Contains("not queryable"), "request rejection exposes useful reason"); }
+}
 var syncRoot = Path.Combine(Path.GetTempPath(), "reminders-sync-tests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(syncRoot);
 try
 {
     var syncVault = new MemorySecrets(); var syncSecrets = new SecretStore(syncVault);
     syncSecrets.Session("test@example.com", J.Node(new { session_token = "saved", client_id = "test" }).ToJsonString());
-    JsonObject? serverRecord = null; var changeTag = 0; var events = new List<string>();
+    JsonObject? serverRecord = null; var changeTag = 0; var events = new List<string>(); var tagReads = 0; var changedTags = false;
     using var cache = new Cache(Path.Combine(syncRoot, "cache.db"));
     using var client = new ICloudClient("test@example.com", syncSecrets, () => new ScriptHandler(async request =>
     {
@@ -174,12 +179,21 @@ try
         }
         else if (path.EndsWith("records/lookup")) response = new JsonObject { ["records"] = new JsonArray(serverRecord!.DeepClone()) };
         else if (path.EndsWith("records/query") && body.Number("resultsLimit") == 1) response = J.Node(new { records = Array.Empty<object>(), syncToken = "cursor" });
-        else if (path.EndsWith("records/query") && body["query"].Text("recordType") == "Hashtag") response = new JsonObject { ["records"] = new JsonArray(new JsonObject { ["recordName"] = "Hashtag/1", ["recordType"] = "Hashtag", ["fields"] = new JsonObject { ["Name"] = CloudKit.String("school"), ["Reminder"] = CloudKit.Reference(serverRecord!.Required("recordName")) } }) };
+        else if (path.EndsWith("records/query") && body["query"].Text("recordType") == "Hashtag")
+            return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("{\"reason\":\"Hashtag is not queryable\"}") };
         else if (path.EndsWith("records/query")) response = new JsonObject { ["records"] = new JsonArray(serverRecord!.DeepClone()) };
         else if (path.EndsWith("changes/zone"))
         {
             var types = body.Array("zones")[0]!.Array("desiredRecordTypes");
-            response = new JsonObject { ["zones"] = new JsonArray(new JsonObject { ["syncToken"] = "cursor", ["moreComing"] = false, ["records"] = types.Count == 1 ? new JsonArray(new JsonObject { ["recordName"] = "List/1", ["recordType"] = "List", ["fields"] = new JsonObject { ["Name"] = CloudKit.String("School"), ["Count"] = CloudKit.Number(1) } }) : new JsonArray() }) };
+            JsonObject Tag(string tagId, string name) => new() { ["recordName"] = tagId, ["recordType"] = "Hashtag", ["fields"] = new JsonObject { ["Name"] = CloudKit.String(name), ["Reminder"] = CloudKit.Reference(serverRecord!.Required("recordName")) } };
+            JsonArray records;
+            if (types.Count == 1 && types[0]!.GetValue<string>() == "Hashtag")
+            {
+                tagReads++; records = new JsonArray(Tag("Hashtag/1", "old"), Tag("Hashtag/1", changedTags ? "engineering" : "school"), Tag("Hashtag/removed", "removed"), new JsonObject { ["recordName"] = "Hashtag/removed", ["deleted"] = true }, new JsonObject { ["recordName"] = "Hashtag/tombstone", ["recordType"] = "Hashtag", ["reason"] = "deleted" });
+            }
+            else if (types.Count == 1) records = new JsonArray(new JsonObject { ["recordName"] = "List/1", ["recordType"] = "List", ["fields"] = new JsonObject { ["Name"] = CloudKit.String("School"), ["Count"] = CloudKit.Number(1) } });
+            else records = changedTags ? new JsonArray(Tag("Hashtag/1", "engineering")) : new JsonArray();
+            response = new JsonObject { ["zones"] = new JsonArray(new JsonObject { ["syncToken"] = "cursor", ["moreComing"] = false, ["records"] = records }) };
         }
         else throw new Exception("unexpected request " + path);
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(response.ToJsonString()) };
@@ -192,10 +206,14 @@ try
     var id = serverRecord!.Required("recordName"); Equal("Newer homework", cache.Reminder(id).Text("title"), "full sync preserves queued edit after id mapping");
     Equal("List/1", cache.Reminder(id).Text("list_id"), "partial upload response preserves list");
     Equal(0, cache.Pending().Count, "outbox drained"); Equal("school", cache.Reminder(id)!.Array("tags")[0]!.GetValue<string>(), "tags refreshed");
+    Equal(1, tagReads, "full sync reads tags through zone changes"); Equal(1, cache.Reminder(id)!.Array("tags").Count, "duplicate and deleted tags excluded");
     Equal("School", cache.Lists[0].Text("title"), "full sync lists"); Equal("cursor", cache.Meta("sync_cursor"), "cursor committed after full sync");
     Check(events.Contains("sync_started") && events.Contains("sync_finished"), "sync lifecycle events");
     cache.Edit(id, new() { ["completed"] = true }); cache.Enqueue(id, "update", J.Node(new { completed = true }), cache.Reminder(id).Text("change_tag"));
     await sync.Sync(false, default); Check(cache.Reminder(id).Flag("completed"), "completion uploads"); Check(cache.Reminder(id).Text("completed_date") is not null, "completion date round trip");
+    changedTags = true; await sync.Sync(false, default);
+    Equal("engineering", cache.Reminder(id)!.Array("tags")[0]!.GetValue<string>(), "delta refresh uses zone changes for tags"); Equal(2, tagReads, "delta tags fetched once");
+    Equal("cursor", cache.Meta("sync_cursor"), "delta cursor committed after tag refresh"); changedTags = false;
     cache.Edit(id, new() { ["title"] = "My local version" }); cache.Enqueue(id, "update", J.Node(new { title = "My local version" }), cache.Reminder(id).Text("change_tag"));
     serverRecord!["recordChangeTag"] = "externally-changed"; serverRecord["fields"]!["TitleDocument"] = CloudKit.String(AppleDocument.Encode("Remote version"));
     await sync.Sync(false, default); Equal(1, cache.Conflicts.Count, "remote change becomes conflict");

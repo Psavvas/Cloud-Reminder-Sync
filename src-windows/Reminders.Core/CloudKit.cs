@@ -48,6 +48,8 @@ internal sealed class CloudKit(AppleAuth auth)
             if (response.Text.Contains("termsUpdateNeeded")) throw new CoreException("TERMS_REQUIRED", "Apple requires you to accept updated iCloud terms.");
             if (response.Status is 401 or 403 or 421) throw new CoreException("AUTH_REQUIRED", "Your iCloud session expired.");
             if (response.Status == 409) throw new CoreException("CONFLICT", "This reminder changed on another device while you were editing it.", response.Text);
+            if (response.Status is >= 400 and < 500 && response.Status != 429)
+                throw new CoreException("ERROR", $"iCloud rejected the sync request (HTTP {response.Status}).", AppleAuth.Detail(J.Parse(response.Text)));
             throw new CoreException("NETWORK", "Could not reach iCloud", $"HTTP {response.Status}: {AppleAuth.Detail(J.Parse(response.Text))}");
         }
         return JsonNode.Parse(response.Text) ?? throw new CoreException("ERROR", "Invalid CloudKit response");
