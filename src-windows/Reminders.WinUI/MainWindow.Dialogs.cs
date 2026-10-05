@@ -279,8 +279,7 @@ public sealed partial class MainWindow
         if (!ShowCompleted.IsOn && _view.Key != "completed") rows = rows.Where(row => !row.Completed);
         if (!string.IsNullOrWhiteSpace(SearchBox.Text)) rows = rows.Where(row => (row.Title + " " + row.Description).Contains(SearchBox.Text, StringComparison.OrdinalIgnoreCase));
         rows = _sort switch { "title" => rows.OrderBy(row => row.Title), "priority" => rows.OrderBy(row => row.Priority == 0 ? 10 : row.Priority), _ => rows.OrderBy(row => row.DueDate is null).ThenBy(row => row.DueDate) };
-        _reminders.Clear(); foreach (var row in rows) _reminders.Add(row);
+        SetReminderRows(rows);
         SetBadge("smart:today", _demoRows.Count(row => !row.Completed && !row.Deleted && DateTimeOffset.TryParse(row.DueDate, out var due) && due.LocalDateTime.Date <= DateTime.Today));
-        UpdateRows();
     }
 }

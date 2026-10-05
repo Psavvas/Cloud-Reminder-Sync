@@ -18,6 +18,10 @@ public sealed partial class MainWindow : Window
 {
     private SyncClient _sync = new();
     private readonly ObservableCollection<ReminderItem> _reminders = [];
+    private readonly Microsoft.UI.Xaml.Data.CollectionViewSource _sectionView = new() { IsSourceGrouped = true };
+    private string _sectionSignature = "";
+    private bool _regrouping;
+    private DateTime _reminderDate = DateTime.Today;
     private readonly DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(15) };
     private readonly DispatcherTimer _notificationTimer = new() { Interval = TimeSpan.FromSeconds(30) };
@@ -65,7 +69,16 @@ public sealed partial class MainWindow : Window
         ReminderList.ItemsSource = _reminders;
         DetailPriority.SelectedIndex = 0;
         _searchTimer.Tick += async (_, _) => { _searchTimer.Stop(); await LoadRemindersAsync(); };
-        _statusTimer.Tick += async (_, _) => { foreach (var reminder in _reminders) reminder.RefreshTimeMetadata(); await RefreshStatusAsync(); };
+        _statusTimer.Tick += async (_, _) =>
+        {
+            foreach (var reminder in _reminders) reminder.RefreshTimeMetadata();
+            if (_completing.Count == 0)
+            {
+                if (_reminderDate != DateTime.Today) await LoadRemindersAsync();
+                else RebuildReminderSections();
+            }
+            await RefreshStatusAsync();
+        };
         _notificationTimer.Tick += async (_, _) => await CheckNotificationsAsync();
         _syncTimer.Tick += async (_, _) => await BackgroundSyncAsync();
         _updateTimer.Tick += async (_, _) => await CheckForUpdatesAsync(false);
@@ -224,16 +237,56 @@ public sealed partial class MainWindow : Window
             query[_view.Kind switch { NavKind.List => "list_id", NavKind.Tag => "tag", _ => "scope" }] = _view.Key;
             var rows = await _sync.CallAsync<List<ReminderItem>>("reminders", query);
             if (_completing.Count > 0) return;
-            var selectedId = _selected?.Id; _reminders.Clear(); foreach (var row in rows) _reminders.Add(row);
-            UpdateRows();
-            if (selectedId is not null) ReminderList.SelectedItem = _reminders.FirstOrDefault(row => row.Id == selectedId);
+            SetReminderRows(rows);
         }
         catch (Exception error) { ShowInfo("Couldn't load reminders", error.Message, InfoBarSeverity.Error); }
     }
     private void UpdateRows()
     {
+        RebuildReminderSections(force: true);
         EmptyState.Visibility = _reminders.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RowCount.Text = _reminders.Count == 1 ? "1 reminder" : $"{_reminders.Count:N0} reminders";
+    }
+    private void SetReminderRows(IEnumerable<ReminderItem> rows)
+    {
+        var selectedId = _selected?.Id;
+        _regrouping = true;
+        try { _reminders.Clear(); foreach (var row in rows) _reminders.Add(row); }
+        finally { _regrouping = false; }
+        _reminderDate = DateTime.Today;
+        UpdateRows();
+        if (selectedId is not null)
+        {
+            var selected = _reminders.FirstOrDefault(row => row.Id == selectedId);
+            _regrouping = true;
+            try { ReminderList.SelectedItem = selected; }
+            finally { _regrouping = false; }
+            ShowDetail(selected);
+        }
+    }
+    private void RebuildReminderSections(bool force = false)
+    {
+        if (_view.Kind != NavKind.Smart || _view.Key is not ("today" or "upcoming"))
+        {
+            if (ReferenceEquals(ReminderList.ItemsSource, _reminders)) return;
+            _regrouping = true;
+            try { ReminderList.ItemsSource = _reminders; ReminderList.SelectedItem = _reminders.FirstOrDefault(row => row.Id == _selected?.Id); }
+            finally { _regrouping = false; }
+            _sectionSignature = "";
+            return;
+        }
+        var groups = ReminderGrouping.Group(_reminders, _view.Key, _sort, DateTimeOffset.Now);
+        var signature = JsonSerializer.Serialize(groups.Select(group => new { group.Title, Ids = group.Items.Select(row => row.Id) }));
+        if (!force && signature == _sectionSignature) return;
+        _regrouping = true;
+        try
+        {
+            _sectionView.Source = groups.Select(group => new ReminderSection(group.Title, group.Items)).ToList();
+            ReminderList.ItemsSource = _sectionView.View;
+            ReminderList.SelectedItem = _reminders.FirstOrDefault(row => row.Id == _selected?.Id);
+            _sectionSignature = signature;
+        }
+        finally { _regrouping = false; }
     }
     private async Task RefreshStatusAsync()
     {
@@ -550,7 +603,10 @@ public sealed partial class MainWindow : Window
 
     }
 
-    private void ReminderList_SelectionChanged(object sender, SelectionChangedEventArgs e) => ShowDetail(ReminderList.SelectedItem as ReminderItem);
+    private void ReminderList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_regrouping) ShowDetail(ReminderList.SelectedItem as ReminderItem);
+    }
     private void ShowDetail(ReminderItem? reminder)
     {
         _selected = reminder; _loadingDetail = true; NoSelection.Visibility = reminder is null ? Visibility.Visible : Visibility.Collapsed; DetailPane.Visibility = reminder is null ? Visibility.Collapsed : Visibility.Visible;

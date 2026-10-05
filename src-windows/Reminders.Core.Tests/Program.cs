@@ -233,7 +233,8 @@ try
     try { await login; throw new Exception("shutdown should cancel sign-in"); } catch (OperationCanceledException) { Check(true, "shutdown cancels active direct call"); }
 }
 finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(shutdownRoot, true); }
-Console.WriteLine($"Passed {passed} backend checks.");
+ReminderGroupingChecks.Run(Check);
+Console.WriteLine($"Passed {passed} backend and scheduling checks.");
 
 sealed class MemorySecrets : ISecrets
 {
