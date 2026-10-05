@@ -47,6 +47,10 @@
        <AppBarButton Icon="Sort" Label="Sort"><AppBarButton.Flyout><MenuFlyout><RadioMenuFlyoutItem Text="Manual" Tag="manual" GroupName="sort" IsChecked="True" Click="Sort_Click"/><RadioMenuFlyoutItem Text="Due date" Tag="due" GroupName="sort" Click="Sort_Click"/><RadioMenuFlyoutItem Text="Priority" Tag="priority" GroupName="sort" Click="Sort_Click"/><RadioMenuFlyoutItem Text="Title" Tag="title" GroupName="sort" Click="Sort_Click"/></MenuFlyout></AppBarButton.Flyout></AppBarButton>
       </CommandBar>
       <ListView x:Name="ReminderList" Grid.Row="2" SelectionChanged="ReminderList_SelectionChanged" IsItemClickEnabled="False" Padding="8,0">
+       <ListView.GroupStyle><GroupStyle HidesIfEmpty="True">
+        <GroupStyle.HeaderContainerStyle><Style TargetType="ListViewHeaderItem"><Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,0,0,2"/></Style></GroupStyle.HeaderContainerStyle>
+        <GroupStyle.HeaderTemplate><DataTemplate x:DataType="local:ReminderSection"><TextBlock Text="{x:Bind Title}" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="14,10,14,2"/></DataTemplate></GroupStyle.HeaderTemplate>
+       </GroupStyle></ListView.GroupStyle>
        <ListView.ItemContainerTransitions><TransitionCollection><AddDeleteThemeTransition/><ReorderThemeTransition/></TransitionCollection></ListView.ItemContainerTransitions>
        <ListView.ItemTemplate><DataTemplate x:DataType="local:ReminderItem"><Grid Padding="10,10"><Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition/></Grid.ColumnDefinitions>
         <CheckBox IsChecked="{x:Bind Completed, Mode=TwoWay}" Click="Complete_Click" VerticalAlignment="Top" AutomationProperties.Name="Mark reminder complete"/>

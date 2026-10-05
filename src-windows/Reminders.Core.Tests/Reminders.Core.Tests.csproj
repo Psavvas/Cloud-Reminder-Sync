@@ -7,4 +7,5 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="..\Reminders.Core\Reminders.Core.csproj" /></ItemGroup>
+  <ItemGroup><Compile Include="..\Reminders.WinUI\Services\ReminderGrouping.cs" Link="ReminderGrouping.cs" /></ItemGroup>
 </Project>

@@ -13,7 +13,7 @@ public sealed class ReminderList
     [JsonPropertyName("is_group")] public bool IsGroup { get; set; }
 }
 
-public sealed class ReminderItem : INotifyPropertyChanged
+public sealed class ReminderItem : INotifyPropertyChanged, Services.IScheduledReminder
 {
     private string _title = "";
     private bool _completed;
@@ -95,3 +95,9 @@ public sealed class SyncException(string code, string message, string detail = "
 
 public sealed record NavEntry(string Label, string Glyph, NavKind Kind, string Key, long Count = 0, string? Color = null);
 public enum NavKind { Smart, List, Tag }
+
+public sealed class ReminderSection(string title, IEnumerable<ReminderItem> items)
+    : System.Collections.ObjectModel.ObservableCollection<ReminderItem>(items)
+{
+    public string Title { get; } = title;
+}
