@@ -77,7 +77,7 @@ public sealed partial class MainWindow
         if (_tags.Count > 0)
         {
             Navigation.MenuItems.Add(new NavigationViewItemHeader { Content = "Tags" });
-            foreach (var tag in _tags) Navigation.MenuItems.Add(CreateNavigationItem("#" + tag, "#", $"tag:{tag}"));
+            foreach (var tag in _tags) Navigation.MenuItems.Add(CreateNavigationItem("#" + tag, "\uE8EC", $"tag:{tag}"));
         }
         _restoringNavigation = false;
         RestoreNavigationSelection();
