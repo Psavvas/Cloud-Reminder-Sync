@@ -617,6 +617,7 @@ public sealed partial class MainWindow : Window
             DetailAllDay.IsOn = reminder.AllDay; DetailTime.IsEnabled = !reminder.AllDay; DetailFlagged.IsOn = reminder.Flagged;
         }
         SaveButton.IsEnabled = false; _loadingDetail = false;
+        UpdatePaneLayout();
         if (reminder is not null) AnimateDetailPane();
     }
     private void AnimateDetailPane()

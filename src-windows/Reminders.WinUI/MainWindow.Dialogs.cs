@@ -199,6 +199,9 @@ public sealed partial class MainWindow
         {
             var themeValue = _settings.Text("theme", "system");
             var theme = new ComboBox { Header = "App theme", ItemsSource = new[] { "Match Windows", "Light", "Dark" }, SelectedIndex = themeValue switch { "light" => 1, "dark" => 2, _ => 0 }, HorizontalAlignment = HorizontalAlignment.Stretch };
+            var paneSizing = new ComboBox { Header = "Reminder detail sizing", ItemsSource = new[] { "Automatic", "Custom" }, SelectedIndex = _uiPreferences.DetailPaneFraction is null ? 0 : 1, HorizontalAlignment = HorizontalAlignment.Stretch };
+            var detailWidth = new Slider { Header = "Detail pane share (%)", Minimum = 0, Maximum = 100, StepFrequency = 1, Value = Math.Clamp(_uiPreferences.DetailPaneFraction ?? 0.5, 0, 1) * 100, IsEnabled = paneSizing.SelectedIndex == 1 };
+            paneSizing.SelectionChanged += (_, _) => detailWidth.IsEnabled = paneSizing.SelectedIndex == 1;
             var animation = new ToggleSwitch { Header = "Animate completed reminders", IsOn = _uiPreferences.CompletionAnimation };
             var sync = new NumberBox { Header = "Sync interval (minutes)", Minimum = 5, Maximum = 60, Value = _settings.Number("sync_minutes") is 0 ? 10 : _settings.Number("sync_minutes"), SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
             var notifications = new ToggleSwitch { Header = "Due-date notifications", IsOn = _settings.Flag("notifications_enabled") };
@@ -208,7 +211,8 @@ public sealed partial class MainWindow
             if (defaultList.SelectedIndex < 0) defaultList.SelectedIndex = 0;
             var panel = new StackPanel { Spacing = 14, MinWidth = 360 };
             void Heading(string text) => panel.Children.Add(new TextBlock { Text = text, FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 10, 0, 0) });
-            Heading("Appearance"); panel.Children.Add(theme); panel.Children.Add(animation);
+            Heading("Appearance"); panel.Children.Add(theme); panel.Children.Add(animation); panel.Children.Add(paneSizing); panel.Children.Add(detailWidth);
+            panel.Children.Add(new TextBlock { Text = "Drag the divider to resize the panes. Double-click it to restore automatic sizing. Smaller windows show one pane at a time.", TextWrapping = TextWrapping.Wrap });
             Heading("Reminders"); panel.Children.Add(defaultList); panel.Children.Add(notifications);
             Heading("iCloud sync"); panel.Children.Add(sync);
             panel.Children.Add(new TextBlock { Text = "Changes save locally and upload automatically. Use Sync now to check for changes immediately.", TextWrapping = TextWrapping.Wrap });
@@ -242,7 +246,9 @@ public sealed partial class MainWindow
             themeValue = theme.SelectedIndex switch { 1 => "light", 2 => "dark", _ => "system" };
             var values = new { theme = themeValue, sync_minutes = (int)Math.Clamp(sync.Value, 5, 60), notifications_enabled = notifications.IsOn, default_list_id = defaultList.SelectedValue as string };
             _settings = _demo ? JsonSerializer.SerializeToElement(values) : await _sync.CallAsync("set_settings", values);
-            _uiPreferences.CompletionAnimation = animation.IsOn; SaveUiPreferences(); ApplyTheme(themeValue);
+            _uiPreferences.CompletionAnimation = animation.IsOn;
+            _uiPreferences.DetailPaneFraction = paneSizing.SelectedIndex == 0 ? null : detailWidth.Value / 100;
+            SaveUiPreferences(); UpdatePaneLayout(); ApplyTheme(themeValue);
         }
         catch (Exception error) { ShowInfo("Couldn't save settings", error.Message, InfoBarSeverity.Error); }
         finally { _dialogOpen = false; }

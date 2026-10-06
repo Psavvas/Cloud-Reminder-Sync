@@ -8,4 +8,5 @@
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="..\Reminders.Core\Reminders.Core.csproj" /></ItemGroup>
   <ItemGroup><Compile Include="..\Reminders.WinUI\Services\ReminderGrouping.cs" Link="ReminderGrouping.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="..\Reminders.WinUI\Services\PaneSizing.cs" Link="PaneSizing.cs" /></ItemGroup>
 </Project>
