@@ -225,10 +225,10 @@ public sealed partial class MainWindow
             var requestedUpdateCheck = false;
             checkUpdates.Click += (_, _) => { requestedUpdateCheck = true; dialog.Hide(); };
             panel.Children.Add(checkUpdates);
-            Heading("About Cloud Reminder Sync");
+            Heading("About Reminders for Windows");
             panel.Children.Add(new TextBlock
             {
-                Text = "Cloud Reminder Sync is an independent app and is not affiliated with, endorsed by, or sponsored by Apple Inc. iCloud is a trademark of Apple Inc. Sync uses unofficial iCloud interfaces that may change or stop working without notice.",
+                Text = "Reminders for Windows is an independent app and is not affiliated with, endorsed by, or sponsored by Apple Inc. or Microsoft Corporation. iCloud is a trademark of Apple Inc. Windows is a trademark of Microsoft Corporation. Sync uses unofficial iCloud interfaces that may change or stop working without notice.",
                 TextWrapping = TextWrapping.Wrap
             });
             panel.Children.Add(new HyperlinkButton

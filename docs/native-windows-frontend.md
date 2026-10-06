@@ -54,6 +54,13 @@ motion preference and the app's animation toggle disable that delay.
 Demo mode includes an overdue reminder and supports filtering, creation,
 completion, customization, settings, and deletion in memory.
 
+Drag the divider all the way right to collapse reminder details. Selecting a
+reminder then opens its details across the content area with **Back to reminders**,
+just as automatic sizing does in a narrow window. Back restores the list and
+collapsed divider. Drag the divider left, double-click it, or choose Automatic
+detail sizing in Settings to restore a split view. A custom detail share of 0%
+uses the same behavior, including after restarting the app.
+
 ### Manual UI verification
 
 Run `scripts\run-windows.ps1 -Demo`, then check:
@@ -69,6 +76,11 @@ Run `scripts\run-windows.ps1 -Demo`, then check:
   the prior settings. Reopening shows the saved values.
 - Completing a reminder visibly checks it before it leaves the list; disabling
   animation removes the pause.
+- Collapse details while a reminder is selected, then select that same reminder:
+  full-width details and Back must be available. Back returns to the list with
+  the divider still collapsed. Reopen the divider and check split-view editing.
+- Repeat with Settings' Custom detail share set to 0%, then check automatic
+  detail sizing in a narrow window and a nonzero custom split.
 
 For persistence checks, run the regular app and restart after customizing a
 list. Demo mode intentionally does not write preferences.

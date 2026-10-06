@@ -1,10 +1,10 @@
-# Rebuild the Cloud Reminder Sync cloud/check artwork and Windows icon sizes.
+# Rebuild the Reminders for Windows cloud/check artwork and Windows icon sizes.
 # Run on Windows; System.Drawing supplies the vector drawing and PNG encoding.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $repository = Split-Path -Parent $PSScriptRoot
-$appAssets = Join-Path $repository 'src-windows/Reminders.WinUI/Assets'
-$packageAssets = Join-Path $repository 'src-windows/Reminders.Package/Assets'
+$appAssets = Join-Path $repository 'src/Reminders.WinUI/Assets'
+$packageAssets = Join-Path $repository 'src/Reminders.Package/Assets'
 
 function New-CloudReminderIcon([int]$size) {
     $canvas = [Drawing.Bitmap]::new(1024, 1024)

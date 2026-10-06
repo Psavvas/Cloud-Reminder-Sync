@@ -20,7 +20,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>0.4.3</Version>
-    <Product>Cloud Reminder Sync</Product>
+    <Product>Reminders for Windows</Product>
     <Authors>Paul Savvas</Authors>
     <Company>paulsavvas.com</Company>
     <Description>An independent native Windows client compatible with Apple iCloud Reminders.</Description>

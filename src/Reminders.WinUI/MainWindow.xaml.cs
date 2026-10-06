@@ -687,7 +687,7 @@ public sealed partial class MainWindow : Window
                 if (manual) { UpdateInfoBar.Title = "You're up to date"; UpdateInfoBar.Message = "No newer stable release is available."; UpdateInfoBar.IsOpen = true; UpdateButton.Visibility = Visibility.Collapsed; }
                 return;
             }
-            UpdateInfoBar.Title = $"Cloud Reminder Sync {_availableUpdate.Version} is available";
+            UpdateInfoBar.Title = $"Reminders for Windows {_availableUpdate.Version} is available";
             UpdateInfoBar.Message = AppUpdater.CanInstall ? "Install the update and restart when you're ready. Your reminders and sign-in will be kept." : "Download the new release from GitHub for this portable or packaged build.";
             UpdateButton.Content = AppUpdater.CanInstall ? "Install and restart" : "Open releases";
             UpdateButton.Visibility = Visibility.Visible;
@@ -715,7 +715,7 @@ public sealed partial class MainWindow : Window
         UpdateButton.IsEnabled = false;
         try
         {
-            var confirmation = new ContentDialog { XamlRoot = Root.XamlRoot, Title = "Install update?", Content = "Cloud Reminder Sync will close while the update installs, then reopen. Save any unfinished reminder edits first.", PrimaryButtonText = "Install and restart", CloseButtonText = "Later" };
+            var confirmation = new ContentDialog { XamlRoot = Root.XamlRoot, Title = "Install update?", Content = "Reminders for Windows will close while the update installs, then reopen. Save any unfinished reminder edits first.", PrimaryButtonText = "Install and restart", CloseButtonText = "Later" };
             if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
             UpdateInfoBar.Title = "Downloading update";
             // Progress<T> does not rely on a WinUI SynchronizationContext.

@@ -21,7 +21,7 @@ replacing an existing installation.
 
 The checked-in manifest now uses the reserved app's Partner Center identity:
 
-- Name: `PaulSavvas.CloudReminderSync`
+- Name: `PaulSavvas.RemindersforWindows`
 - Publisher: `CN=3E985065-3B5B-4175-965A-08CB432B2EFB`
 - PublisherDisplayName: `Paul Savvas`
 
@@ -38,6 +38,26 @@ architecture for each customer's device. Store builds read the assigned identity
 from the manifest and keep submission files separate from sideloading outputs.
 Explicit identity parameters remain available for another reservation. Ordinary
 non-Store command-line builds retain the legacy development identity by default.
+
+## Product display name
+
+The application and package display name is **Reminders for Windows**. The
+manifest uses the exact product identity supplied from Partner Center for this
+product, including the casing of `PaulSavvas.RemindersforWindows`. Upload its
+packages to that product's submission and select the reserved display name for
+the Store listing. The older `PaulSavvas.CloudReminderSync` identity belongs to
+a different package family; packages built with it cannot be submitted as this
+product. For future display-name changes on the same product, retain the assigned
+package identity and publisher.
+
+Microsoft's naming guidance permits plain-text compatibility phrases such as
+"for Windows" when they do not imply Microsoft endorsement. This is naming
+guidance, not trademark clearance. Store availability and any third-party
+trademark rights still need checking. Keep the Apple and Microsoft independence
+notice in the listing.
+
+- [Microsoft's app trademark guidance](https://learn.microsoft.com/en-us/windows/apps/publish/partner-center/trademark-and-copyright-protection)
+- [Manage MSIX app names](https://learn.microsoft.com/en-us/windows/apps/publish/partner-center/pwa/manage-app-name-reservations)
 
 Alternatively, associate **Reminders.Package** with your app in Visual Studio and
 use **Publish → Create App Packages → Microsoft Store**. The wizard can create a

@@ -1,12 +1,12 @@
 # SRP reference vectors
 
-The sign-in path in `src-windows/Reminders.Core/Srp.cs` reimplements Apple's web SRP
+The sign-in path in `src/Reminders.Core/Srp.cs` reimplements Apple's web SRP
 handshake in C#. The implementation it replaced delegated that handshake to
 [pyicloud], which in turn uses the [srp] package. pyicloud is the only version
 of this flow known to work against Apple in production, so it — not this
 codebase — is the reference.
 
-The vectors in `src-windows/Reminders.Core.Tests/Program.cs` are generated from that reference rather
+The vectors in `tests/Reminders.Core.Tests/Program.cs` are generated from that reference rather
 than from our own output. A test that asserts an implementation's own result
 proves only that it is deterministic; it passes just as happily when the
 construction is wrong.

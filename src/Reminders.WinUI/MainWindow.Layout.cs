@@ -11,6 +11,7 @@ public sealed partial class MainWindow
 {
     private bool _updatingLayout;
     private double? _dragOriginalFraction;
+    private ReminderItem? _dragOriginalSelection;
 
     private void ReminderLayout_SizeChanged(object sender, SizeChangedEventArgs args) => UpdatePaneLayout();
 
@@ -20,7 +21,7 @@ public sealed partial class MainWindow
         _updatingLayout = true;
         try
         {
-            var sizes = PaneSizing.Calculate(ReminderLayout.ActualWidth, _uiPreferences.DetailPaneFraction);
+            var sizes = PaneSizing.Calculate(ReminderLayout.ActualWidth, _uiPreferences.DetailPaneFraction, _selected is not null);
             // Star columns can shrink during measure; fixed pixel columns keep the
             // parent's desired width too large to deliver a smaller SizeChanged.
             ReminderColumn.Width = sizes.List == 0 ? new GridLength(0) : new GridLength(sizes.Compact ? 1 : sizes.List, GridUnitType.Star);
@@ -52,16 +53,32 @@ public sealed partial class MainWindow
 
     private void ResizeDetails(double delta)
     {
+        var previousFraction = _uiPreferences.DetailPaneFraction;
         _uiPreferences.DetailPaneFraction = PaneSizing.Resize(ReminderLayout.ActualWidth, _uiPreferences.DetailPaneFraction, delta);
+        if (_uiPreferences.DetailPaneFraction == 0 && previousFraction != 0)
+        {
+            ReminderList.SelectedItem = null;
+            ShowDetail(null);
+        }
         UpdatePaneLayout();
     }
 
-    private void PaneDivider_DragStarted(object sender, DragStartedEventArgs args) => _dragOriginalFraction = _uiPreferences.DetailPaneFraction;
+    private void PaneDivider_DragStarted(object sender, DragStartedEventArgs args)
+    {
+        _dragOriginalFraction = _uiPreferences.DetailPaneFraction;
+        _dragOriginalSelection = _selected;
+    }
     private void PaneDivider_DragDelta(object sender, DragDeltaEventArgs args) => ResizeDetails(args.HorizontalChange);
     private void PaneDivider_DragCompleted(object sender, DragCompletedEventArgs args)
     {
-        if (args.Canceled) { _uiPreferences.DetailPaneFraction = _dragOriginalFraction; UpdatePaneLayout(); }
+        if (args.Canceled)
+        {
+            _uiPreferences.DetailPaneFraction = _dragOriginalFraction;
+            ReminderList.SelectedItem = _dragOriginalSelection;
+            ShowDetail(_dragOriginalSelection);
+        }
         else SaveUiPreferences();
+        _dragOriginalSelection = null;
     }
 
     private void PaneDivider_KeyDown(object sender, KeyRoutedEventArgs args)

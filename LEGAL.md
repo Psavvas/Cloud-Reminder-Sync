@@ -3,12 +3,18 @@
 Reminders for Windows is an independent community project maintained by
 Paul Savvas and published under the `paulsavvas.com` identity.
 It is not authorized, sponsored, endorsed, or otherwise approved by Apple Inc.
+or Microsoft Corporation.
 
 The names Apple and iCloud are used only to identify compatibility with Apple
 products and services. Apple and iCloud are trademarks of Apple Inc.,
 registered in the U.S. and other countries and regions. No Apple logo, Apple
 application icon, or other Apple-owned graphic asset is distributed by this
 project.
+
+Windows is a trademark of Microsoft Corporation. The phrase "for Windows"
+describes platform compatibility; it does not imply Microsoft affiliation or
+certification. The product name is subject to availability in Microsoft Store
+and applicable trademark rights.
 
 ## Unofficial service access
 

@@ -28,9 +28,13 @@ internal static class PaneSizingChecks
             var detailsClosed = PaneSizing.Calculate(width, 0);
             var listClosed = PaneSizing.Calculate(width, 1);
             check(!detailsClosed.Compact && detailsClosed.Details == 0 && detailsClosed.List == width - 8, "Details can close completely at any usable window width");
+            var selectedDetails = PaneSizing.Calculate(width, 0, detailSelected: true);
+            check(selectedDetails.Compact && selectedDetails.List == width && selectedDetails.Details == width, "Selecting a reminder with manually collapsed details opens the full-width view with Back navigation");
+            check(PaneSizing.Calculate(width, 0, detailSelected: false) == detailsClosed, "Back restores the collapsed list layout and its resize divider");
             check(!listClosed.Compact && listClosed.List == 0 && listClosed.Details == width - 8, "List can close completely at any usable window width");
         }
         check(PaneSizing.Calculate(1008, double.NaN) == balanced, "Invalid saved share falls back to automatic sizing");
+        check(PaneSizing.Calculate(1008, 0.65, detailSelected: true) == custom, "Selection preserves a nonzero custom split");
         check(PaneSizing.Calculate(647, double.NaN).Compact, "Invalid custom preference uses compact automatic sizing");
         check(PaneSizing.Calculate(double.NaN, null).Compact, "Invalid or unmeasured width stays compact");
         check(PaneSizing.Calculate(8, 0.5).Compact, "A window smaller than the divider cannot split");

@@ -14,18 +14,16 @@ cookies/
 *.pem
 *.key
 
-# Rust and .NET build output
-.cargo-task-cache/
+# .NET build output
 .nuget/
-sidecar/target/
-src-windows/**/bin/
-src-windows/**/obj/
-src-windows/**/publish/
+src/**/bin/
+src/**/obj/
+src/**/publish/
+tests/**/bin/
+tests/**/obj/
 .vs/
 *.user
 dist-installer/
-dist-sidecar/*
-!dist-sidecar/README.md
 dist-windows/
 dist-windows-arm64/
 dist-msix/

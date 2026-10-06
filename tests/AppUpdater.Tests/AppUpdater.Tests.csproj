@@ -6,6 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../Reminders.WinUI/Services/AppUpdater.cs" Link="AppUpdater.cs" />
+    <Compile Include="../../src/Reminders.WinUI/Services/AppUpdater.cs" Link="AppUpdater.cs" />
   </ItemGroup>
 </Project>
