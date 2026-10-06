@@ -21,9 +21,11 @@ public sealed partial class MainWindow
         try
         {
             var sizes = PaneSizing.Calculate(ReminderLayout.ActualWidth, _uiPreferences.DetailPaneFraction);
-            ReminderColumn.Width = new GridLength(sizes.Compact ? ReminderLayout.ActualWidth : sizes.List);
+            // Star columns can shrink during measure; fixed pixel columns keep the
+            // parent's desired width too large to deliver a smaller SizeChanged.
+            ReminderColumn.Width = new GridLength(sizes.Compact ? 1 : sizes.List, GridUnitType.Star);
             SplitterColumn.Width = new GridLength(sizes.Compact ? 0 : PaneSizing.DividerWidth);
-            DetailsColumn.Width = new GridLength(sizes.Compact ? 0 : sizes.Details);
+            DetailsColumn.Width = new GridLength(sizes.Compact ? 0 : sizes.Details, sizes.Compact ? GridUnitType.Pixel : GridUnitType.Star);
             Grid.SetColumn(DetailsHost, sizes.Compact ? 0 : 2);
             ReminderHost.Visibility = sizes.Compact && _selected is not null ? Visibility.Collapsed : Visibility.Visible;
             DetailsHost.Visibility = sizes.Compact && _selected is null ? Visibility.Collapsed : Visibility.Visible;
