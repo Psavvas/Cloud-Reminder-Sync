@@ -4,12 +4,61 @@
  xmlns:local="using:Reminders.Windows"
  xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives"
  Title="Reminders for Windows">
- <Grid x:Name="Root">
+ <Grid x:Name="Root" SizeChanged="Root_SizeChanged">
+  <Grid.Resources>
+   <ResourceDictionary>
+    <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="AppleTheme.xaml"/></ResourceDictionary.MergedDictionaries>
+    <DataTemplate x:Key="AppleReminderTemplate">
+     <Grid Padding="10,10,12,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition/></Grid.ColumnDefinitions>
+      <CheckBox IsChecked="{Binding Completed, Mode=TwoWay}" Click="Complete_Click" Style="{StaticResource AppleCheckBoxStyle}" VerticalAlignment="Top" AutomationProperties.Name="Mark reminder complete"/>
+      <StackPanel Grid.Column="1" Spacing="5">
+       <TextBlock Text="{Binding DisplayTitle, Mode=OneWay}" FontSize="16" Foreground="{ThemeResource AppleTextBrush}" TextTrimming="CharacterEllipsis"/>
+       <Grid ColumnSpacing="8">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <TextBlock Text="{Binding ApplePriority, Mode=OneWay}" Foreground="{Binding AppleDueBrush, Mode=OneWay}" FontWeight="Bold" FontSize="13"/>
+        <TextBlock Grid.Column="1" Text="{Binding DueText, Mode=OneWay}" Foreground="{Binding AppleDueBrush, Mode=OneWay}" FontSize="13"/>
+        <TextBlock Grid.Column="2" Text="{Binding AppleTags, Mode=OneWay}" Foreground="{ThemeResource AppleBlueBrush}" FontSize="13" TextTrimming="CharacterEllipsis"/>
+        <TextBlock Grid.Column="3" Text="{Binding ApplePending, Mode=OneWay}" Foreground="{ThemeResource AppleBlueBrush}" FontSize="13" AutomationProperties.Name="{Binding AppleSyncDescription}"/>
+       </Grid>
+       <Border Height="1" Background="{ThemeResource AppleDividerBrush}" Margin="0,8,0,0"/>
+      </StackPanel>
+     </Grid>
+    </DataTemplate>
+
+   </ResourceDictionary>
+  </Grid.Resources>
+  <Grid.ColumnDefinitions><ColumnDefinition x:Name="AppleSidebarColumn" Width="0"/><ColumnDefinition/></Grid.ColumnDefinitions>
   <Grid.KeyboardAccelerators>
    <KeyboardAccelerator Key="N" Modifiers="Control" Invoked="NewAccelerator_Invoked"/>
    <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="SearchAccelerator_Invoked"/>
   </Grid.KeyboardAccelerators>
-  <NavigationView x:Name="Navigation" PaneTitle="Reminders for Windows" IsBackButtonVisible="Collapsed"
+  <Grid x:Name="AppleSidebar" Visibility="Collapsed" Background="{ThemeResource AppleSidebarBrush}" BorderBrush="{ThemeResource AppleDividerBrush}" BorderThickness="0,0,1,0">
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Grid Margin="18,14,12,10">
+    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <TextBlock Text="Reminders" FontSize="20" FontWeight="Bold" Foreground="{ThemeResource AppleTextBrush}" VerticalAlignment="Center"/>
+    <Button Grid.Column="1" Style="{StaticResource AppleToolbarButtonStyle}" Click="AppleSync_Click" AutomationProperties.Name="Sync now" ToolTipService.ToolTip="Sync now"><FontIcon Glyph="&#xE895;" FontSize="16"/></Button>
+    <Button Grid.Column="2" Style="{StaticResource AppleToolbarButtonStyle}" Click="AppleSettings_Click" AutomationProperties.Name="Settings" ToolTipService.ToolTip="Settings (Ctrl+,)"><FontIcon Glyph="&#xE713;" FontSize="16"/></Button>
+   </Grid>
+   <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel>
+     <ListView x:Name="AppleSmartLists" SelectionChanged="AppleNavigation_SelectionChanged" ItemContainerStyle="{StaticResource AppleRowStyle}" Padding="10,0"/>
+     <Border Height="1" Background="{ThemeResource AppleDividerBrush}" Margin="0,12,0,10"/>
+     <TextBlock Text="LISTS" Foreground="{ThemeResource AppleSecondaryBrush}" FontSize="12" FontWeight="SemiBold" Margin="18,0,0,8"/>
+     <ListView x:Name="AppleLists" SelectionChanged="AppleNavigation_SelectionChanged" ItemContainerStyle="{StaticResource AppleRowStyle}" Padding="10,0"/>
+     <Border Height="1" Background="{ThemeResource AppleDividerBrush}" Margin="0,12,0,10"/>
+     <TextBlock Text="TAGS" Foreground="{ThemeResource AppleSecondaryBrush}" FontSize="12" FontWeight="SemiBold" Margin="18,0,0,8"/>
+     <ItemsControl x:Name="AppleTags" Margin="18,0,14,14"/>
+     <TextBlock Text="Tags are read-only." TextWrapping="Wrap" Foreground="{ThemeResource AppleSecondaryBrush}" FontSize="12" Margin="18,0,18,16"/>
+    </StackPanel>
+   </ScrollViewer>
+   <StackPanel Grid.Row="2" BorderBrush="{ThemeResource AppleDividerBrush}" BorderThickness="0,1,0,0" Padding="18,12" Spacing="4">
+    <Button x:Name="AppleConflicts" Content="Sync conflicts" Visibility="Collapsed" Click="AppleConflicts_Click"/>
+    <TextBlock x:Name="AppleSyncStatus" Text="Ready to sync" Foreground="{ThemeResource AppleSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
+   </StackPanel>
+  </Grid>
+  <NavigationView Grid.Column="1" x:Name="Navigation" PaneTitle="Reminders for Windows" IsBackButtonVisible="Collapsed"
                   PaneDisplayMode="LeftCompact" IsPaneOpen="True" OpenPaneLength="260" CompactPaneLength="48"
                   IsSettingsVisible="True" IsPaneToggleButtonVisible="True" AlwaysShowHeader="False"
                   PaneOpening="Navigation_PaneOpening" PaneClosing="Navigation_PaneClosing"
@@ -39,13 +88,19 @@
      <Grid.ColumnDefinitions><ColumnDefinition x:Name="ReminderColumn"/><ColumnDefinition x:Name="SplitterColumn" Width="8"/><ColumnDefinition x:Name="DetailsColumn"/></Grid.ColumnDefinitions>
      <Grid x:Name="ReminderHost" Background="{ThemeResource LayerFillColorDefaultBrush}">
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <Grid Margin="24,20,20,8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Grid x:Name="ReminderHeader" Margin="24,20,20,8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
        <StackPanel><TextBlock x:Name="ViewTitle" Text="Today" TextTrimming="CharacterEllipsis" Style="{ThemeResource TitleTextBlockStyle}"/><TextBlock x:Name="ViewSubtitle" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,3,0,0"/></StackPanel>
-       <Button x:Name="AddButton" Grid.Column="1" Style="{ThemeResource AccentButtonStyle}" AutomationProperties.Name="Add reminder" ToolTipService.ToolTip="Add reminder (Ctrl+N)" Click="Add_Click"><StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE710;" FontSize="14"/><TextBlock x:Name="AddLabel" Text="Add reminder"/></StackPanel></Button>
+       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+        <Button x:Name="ApplePaneButton" Visibility="Collapsed" Style="{StaticResource AppleToolbarButtonStyle}" Click="ApplePane_Click" AutomationProperties.Name="Toggle sidebar" ToolTipService.ToolTip="Toggle sidebar"><FontIcon Glyph="&#xE700;" FontSize="18"/></Button>
+        <Button x:Name="AppleSearchButton" Visibility="Collapsed" Style="{StaticResource AppleToolbarButtonStyle}" Click="AppleSearch_Click" AutomationProperties.Name="Search reminders" ToolTipService.ToolTip="Search reminders (Ctrl+F)"><FontIcon Glyph="&#xE721;" FontSize="18"/></Button>
+        <Button x:Name="AppleSortButton" Visibility="Collapsed" Style="{StaticResource AppleToolbarButtonStyle}" Click="AppleSort_Click" AutomationProperties.Name="Sort reminders" ToolTipService.ToolTip="Sort reminders"><FontIcon Glyph="&#xE8CB;" FontSize="18"/></Button>
+        <Button x:Name="AddButton" Style="{ThemeResource AccentButtonStyle}" AutomationProperties.Name="Add reminder" ToolTipService.ToolTip="Add reminder (Ctrl+N)" Click="Add_Click"><StackPanel Orientation="Horizontal" Spacing="7"><FontIcon Glyph="&#xE710;" FontSize="14"/><TextBlock x:Name="AddLabel" Text="Add reminder"/></StackPanel></Button>
+       </StackPanel>
       </Grid>
-      <Grid Grid.Row="1" Padding="24,0,20,8" ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <CheckBox x:Name="AppleShowCompleted" Grid.Row="1" Content="Show completed" Visibility="Collapsed" Foreground="{ThemeResource AppleSecondaryBrush}" Margin="28,0,20,12" Click="AppleShowCompleted_Click"/>
+      <Grid x:Name="SearchRow" Grid.Row="1" Padding="24,0,20,8" ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
        <AutoSuggestBox x:Name="SearchBox" PlaceholderText="Search reminders" QueryIcon="Find" TextChanged="SearchBox_TextChanged" VerticalAlignment="Center"/>
-       <Button Grid.Column="1" Width="40" Height="40" AutomationProperties.Name="Sort" ToolTipService.ToolTip="Sort reminders"><Button.Flyout><MenuFlyout><RadioMenuFlyoutItem Text="Manual" Tag="manual" GroupName="sort" IsChecked="True" Click="Sort_Click"/><RadioMenuFlyoutItem Text="Due date" Tag="due" GroupName="sort" Click="Sort_Click"/><RadioMenuFlyoutItem Text="Priority" Tag="priority" GroupName="sort" Click="Sort_Click"/><RadioMenuFlyoutItem Text="Title" Tag="title" GroupName="sort" Click="Sort_Click"/></MenuFlyout></Button.Flyout><FontIcon Glyph="&#xE8CB;" FontSize="18"/></Button>
+       <Button x:Name="SortButton" Grid.Column="1" Width="40" Height="40" AutomationProperties.Name="Sort" ToolTipService.ToolTip="Sort reminders"><Button.Flyout><MenuFlyout><RadioMenuFlyoutItem Text="Manual" Tag="manual" GroupName="sort" IsChecked="True" Click="Sort_Click"/><RadioMenuFlyoutItem Text="Due date" Tag="due" GroupName="sort" Click="Sort_Click"/><RadioMenuFlyoutItem Text="Priority" Tag="priority" GroupName="sort" Click="Sort_Click"/><RadioMenuFlyoutItem Text="Title" Tag="title" GroupName="sort" Click="Sort_Click"/></MenuFlyout></Button.Flyout><FontIcon Glyph="&#xE8CB;" FontSize="18"/></Button>
       </Grid>
       <ListView x:Name="ReminderList" Grid.Row="2" SelectionChanged="ReminderList_SelectionChanged" IsItemClickEnabled="False" Padding="8,0">
        <ListView.GroupStyle><GroupStyle HidesIfEmpty="True">
@@ -59,7 +114,7 @@
        </Grid></DataTemplate></ListView.ItemTemplate>
       </ListView>
       <Grid x:Name="EmptyState" Grid.Row="2" Visibility="Collapsed" IsHitTestVisible="False"><StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"><FontIcon Glyph="&#xE90C;" FontSize="32" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/><TextBlock Text="Nothing here" Style="{ThemeResource SubtitleTextBlockStyle}" HorizontalAlignment="Center"/><TextBlock Text="Enjoy the quiet—or add a reminder." Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></Grid>
-      <Grid Grid.Row="3" Padding="24,10,20,16"><ToggleSwitch x:Name="ShowCompleted" Header="Show completed" Toggled="ShowCompleted_Toggled"/><TextBlock x:Name="RowCount" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid>
+      <Grid x:Name="ReminderFooter" Grid.Row="3" Padding="24,10,20,16"><ToggleSwitch x:Name="ShowCompleted" Header="Show completed" Toggled="ShowCompleted_Toggled"/><TextBlock x:Name="RowCount" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></Grid>
      </Grid>
      <primitives:Thumb x:Name="PaneDivider" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
        AutomationProperties.Name="Resize reminder details" IsTabStop="True" UseSystemFocusVisuals="True"
@@ -89,23 +144,26 @@
      </primitives:Thumb>
      <Grid x:Name="DetailsHost" Grid.Column="2">
       <StackPanel x:Name="NoSelection" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" Margin="24" MaxWidth="320"><FontIcon Glyph="&#xE8A5;" FontSize="36" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/><TextBlock Text="Select a reminder" TextWrapping="Wrap" TextAlignment="Center" Style="{ThemeResource SubtitleTextBlockStyle}"/><TextBlock Text="Its details will appear here." TextWrapping="Wrap" TextAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
-      <ScrollViewer x:Name="DetailPane" Visibility="Collapsed"><StackPanel Padding="24,20" MaxWidth="620" HorizontalAlignment="Stretch" Spacing="10">
+      <ScrollViewer x:Name="DetailPane" Visibility="Collapsed"><StackPanel x:Name="DetailFields" Padding="24,20" MaxWidth="620" HorizontalAlignment="Stretch" Spacing="10">
        <StackPanel.Transitions><TransitionCollection><EntranceThemeTransition FromHorizontalOffset="20"/></TransitionCollection></StackPanel.Transitions>
        <Button x:Name="BackToReminders" Content="Back to reminders" Click="BackToReminders_Click" Visibility="Collapsed"/>
-       <TextBlock Text="Details" Style="{ThemeResource SubtitleTextBlockStyle}" Margin="0,0,0,4"/>
+       <TextBlock x:Name="DetailHeading" Text="Details" Style="{ThemeResource SubtitleTextBlockStyle}" Margin="0,0,0,4"/>
        <TextBox x:Name="DetailTitle" Header="Title" TextChanged="Detail_Changed"/>
        <TextBox x:Name="DetailNotes" Header="Notes" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="110" TextChanged="Detail_Changed"/>
+       <TextBox x:Name="DetailTags" Header="TAGS" IsReadOnly="True" Visibility="Collapsed"/>
        <Grid x:Name="DetailListPriority" ColumnSpacing="12"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><ComboBox x:Name="DetailList" Header="List" DisplayMemberPath="Title" SelectedValuePath="Id" IsEnabled="False"/><ComboBox x:Name="DetailPriority" Grid.Column="1" Header="Priority" SelectionChanged="Detail_Changed"><ComboBoxItem Content="None" Tag="0"/><ComboBoxItem Content="Low" Tag="9"/><ComboBoxItem Content="Medium" Tag="5"/><ComboBoxItem Content="High" Tag="1"/></ComboBox></Grid>
        <Grid x:Name="DetailDateTime" ColumnSpacing="12"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><CalendarDatePicker x:Name="DetailDate" Header="Due date" DateChanged="Detail_Changed"/><TimePicker x:Name="DetailTime" Grid.Column="1" Header="Time" TimeChanged="Detail_Changed"/></Grid>
+       <Button x:Name="AppleClearDue" Content="Clear due date" Visibility="Collapsed" HorizontalAlignment="Left" Foreground="{ThemeResource AppleBlueBrush}" Background="Transparent" BorderThickness="0" Click="AppleClearDue_Click"/>
        <Grid x:Name="DetailToggles" ColumnSpacing="12"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><ToggleSwitch x:Name="DetailAllDay" Header="All day" Toggled="Detail_Changed"/><ToggleSwitch x:Name="DetailFlagged" Grid.Column="1" Header="Flagged" Toggled="Detail_Changed"/></Grid>
-       <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,10,0,0"><Button x:Name="SaveButton" Content="Save changes" Style="{ThemeResource AccentButtonStyle}" IsEnabled="False" Click="Save_Click"/><Button Content="Delete" AutomationProperties.Name="Delete reminder" Click="Delete_Click"/></StackPanel>
+       <StackPanel x:Name="DetailActions" Orientation="Horizontal" Spacing="8" Margin="0,10,0,0"><Button x:Name="SaveButton" Content="Save changes" Style="{ThemeResource AccentButtonStyle}" IsEnabled="False" Click="Save_Click"/><Button x:Name="DeleteButton" Content="Delete" AutomationProperties.Name="Delete reminder" Click="Delete_Click"/></StackPanel>
+       <TextBlock x:Name="AppleDetailStatus" Visibility="Collapsed" Foreground="{ThemeResource AppleSecondaryBrush}" FontSize="12" TextWrapping="Wrap"/>
       </StackPanel></ScrollViewer>
      </Grid>
     </Grid>
    </Grid>
   </NavigationView>
 
-  <Grid x:Name="AuthGate" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+  <Grid Grid.ColumnSpan="2" x:Name="AuthGate" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="36" Width="430" HorizontalAlignment="Center" VerticalAlignment="Center">
     <Border.Transitions><TransitionCollection><EntranceThemeTransition FromVerticalOffset="24"/></TransitionCollection></Border.Transitions>
     <StackPanel Spacing="12">

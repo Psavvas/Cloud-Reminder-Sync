@@ -21,7 +21,11 @@ public sealed partial class MainWindow
         _updatingLayout = true;
         try
         {
-            var sizes = PaneSizing.Calculate(ReminderLayout.ActualWidth, _uiPreferences.DetailPaneFraction, _selected is not null);
+            var detailFraction = _uiPreferences.DetailPaneFraction;
+            // The reference gives the reminder list about two thirds of the content width.
+            if (IsAppleStyle && detailFraction is null && ReminderLayout.ActualWidth >= PaneSizing.MinimumWidth * 2 + PaneSizing.DividerWidth)
+                detailFraction = Math.Max(PaneSizing.MinimumWidth / (ReminderLayout.ActualWidth - PaneSizing.DividerWidth), 0.35);
+            var sizes = PaneSizing.Calculate(ReminderLayout.ActualWidth, detailFraction, _selected is not null);
             // Star columns can shrink during measure; fixed pixel columns keep the
             // parent's desired width too large to deliver a smaller SizeChanged.
             ReminderColumn.Width = sizes.List == 0 ? new GridLength(0) : new GridLength(sizes.Compact ? 1 : sizes.List, GridUnitType.Star);
@@ -34,9 +38,11 @@ public sealed partial class MainWindow
             DetailsHost.Visibility = (sizes.Compact ? _selected is not null : sizes.Details > 0) ? Visibility.Visible : Visibility.Collapsed;
             PaneDivider.Visibility = sizes.Compact ? Visibility.Collapsed : Visibility.Visible;
             BackToReminders.Visibility = sizes.Compact ? Visibility.Visible : Visibility.Collapsed;
-            AddLabel.Visibility = sizes.List < 400 ? Visibility.Collapsed : Visibility.Visible;
-            var stacked = sizes.Details < 420;
+            AddLabel.Visibility = IsAppleStyle || sizes.List < 400 ? Visibility.Collapsed : Visibility.Visible;
+            var stacked = IsAppleStyle || sizes.Details < 420;
             ArrangeDetailPair(DetailListPriority, DetailPriority, stacked);
+            Grid.SetRow(DetailList, IsAppleStyle ? 1 : 0);
+            if (IsAppleStyle) Grid.SetRow(DetailPriority, 0);
             ArrangeDetailPair(DetailDateTime, DetailTime, stacked);
             ArrangeDetailPair(DetailToggles, DetailFlagged, stacked);
         }
@@ -54,7 +60,8 @@ public sealed partial class MainWindow
     private void ResizeDetails(double delta)
     {
         var previousFraction = _uiPreferences.DetailPaneFraction;
-        _uiPreferences.DetailPaneFraction = PaneSizing.Resize(ReminderLayout.ActualWidth, _uiPreferences.DetailPaneFraction, delta);
+        var currentFraction = _uiPreferences.DetailPaneFraction ?? (IsAppleStyle && ReminderLayout.ActualWidth > PaneSizing.DividerWidth ? DetailsHost.ActualWidth / (ReminderLayout.ActualWidth - PaneSizing.DividerWidth) : (double?)null);
+        _uiPreferences.DetailPaneFraction = PaneSizing.Resize(ReminderLayout.ActualWidth, currentFraction, delta);
         if (_uiPreferences.DetailPaneFraction == 0 && previousFraction != 0)
         {
             ReminderList.SelectedItem = null;

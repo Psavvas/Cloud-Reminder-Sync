@@ -48,6 +48,15 @@ public sealed class ReminderItem : INotifyPropertyChanged, Services.IScheduledRe
             return $"{due:ddd, MMM d} · {due:t}";
         }
     }
+    [JsonIgnore] public string ApplePriority => Priority switch { 1 => "!!!", 5 => "!!", 9 => "!", _ => "" };
+    [JsonIgnore] public string AppleTags => string.Join("  ", Tags.Select(tag => "#" + tag));
+    [JsonIgnore] public string ApplePending => Dirty != 0 ? "•" : "";
+    [JsonIgnore] public string AppleSyncDescription => Dirty != 0 ? "Waiting to sync" : "";
+    [JsonIgnore] public Microsoft.UI.Xaml.Media.Brush AppleDueBrush => new Microsoft.UI.Xaml.Media.SolidColorBrush(
+        IsOverdue ? Microsoft.UI.ColorHelper.FromArgb(255, 255, 59, 48)
+        : !Completed && DateTimeOffset.TryParse(DueDate, out var due) && due.LocalDateTime.Date <= DateTime.Today.AddDays(1)
+            ? Microsoft.UI.ColorHelper.FromArgb(255, 224, 122, 0)
+            : Microsoft.UI.ColorHelper.FromArgb(255, 128, 128, 134));
     [JsonIgnore] public string Metadata
     {
         get
@@ -65,13 +74,19 @@ public sealed class ReminderItem : INotifyPropertyChanged, Services.IScheduledRe
     {
         PropertyChanged?.Invoke(this, new(nameof(Metadata)));
         PropertyChanged?.Invoke(this, new(nameof(MetadataBrush)));
+        PropertyChanged?.Invoke(this, new(nameof(DueText)));
+        PropertyChanged?.Invoke(this, new(nameof(AppleDueBrush)));
+        PropertyChanged?.Invoke(this, new(nameof(ApplePriority)));
+        PropertyChanged?.Invoke(this, new(nameof(AppleTags)));
+        PropertyChanged?.Invoke(this, new(nameof(ApplePending)));
+        PropertyChanged?.Invoke(this, new(nameof(AppleSyncDescription)));
     }
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return;
         field = value; PropertyChanged?.Invoke(this, new(name)); PropertyChanged?.Invoke(this, new(nameof(DisplayTitle)));
-        PropertyChanged?.Invoke(this, new(nameof(Metadata))); PropertyChanged?.Invoke(this, new(nameof(MetadataBrush)));
+        RefreshTimeMetadata();
     }
 }
 

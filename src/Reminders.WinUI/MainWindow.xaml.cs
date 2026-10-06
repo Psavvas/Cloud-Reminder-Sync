@@ -59,6 +59,10 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _windowsReminderTemplate = ReminderList.ItemTemplate;
+        _windowsReminderRowStyle = ReminderList.ItemContainerStyle;
+        ApplyInterfaceStyle();
+        Root.ActualThemeChanged += (_, _) => { if (IsAppleStyle) { ApplyAppleColors(); RebuildAppleNavigation(); } };
         var settingsAccelerator = new KeyboardAccelerator { Key = (global::Windows.System.VirtualKey)188, Modifiers = global::Windows.System.VirtualKeyModifiers.Control };
         settingsAccelerator.Invoked += SettingsAccelerator_Invoked;
         Root.KeyboardAccelerators.Add(settingsAccelerator);
@@ -189,7 +193,11 @@ public sealed partial class MainWindow : Window
         _lists = listsTask.Result;
         DetailList.ItemsSource = _lists.Where(list => !list.IsGroup).ToList();
         var counts = countsTask.Result;
-        SetBadge("smart:today", counts.Number("today"));
+        foreach (var scope in new[] { "today", "upcoming", "all", "completed", "deleted" })
+        {
+            _appleSmartCounts[scope] = counts.Number(scope);
+            SetBadge("smart:" + scope, counts.Number(scope));
+        }
         _tags = tagsTask.Result.Select(tag => tag.Name).Distinct(StringComparer.CurrentCultureIgnoreCase).Order().ToList();
         RebuildListNavigation();
     }
@@ -295,6 +303,10 @@ public sealed partial class MainWindow : Window
         {
             var status = await _sync.CallAsync("sync_status", new { });
             var conflicts = status.Number("conflicts"); ConflictItem.Visibility = conflicts > 0 ? Visibility.Visible : Visibility.Collapsed; ConflictItem.Content = conflicts == 1 ? "1 sync conflict" : $"{conflicts} sync conflicts";
+            AppleConflicts.Visibility = ConflictItem.Visibility; AppleConflicts.Content = ConflictItem.Content;
+            var lastSync = DateTimeOffset.TryParse(status.Text("last_sync", ""), out var synced) ? $"Synced {synced.LocalDateTime:t}" : "Not synced yet";
+            var pendingCount = status.Number("pending_pushes");
+            AppleSyncStatus.Text = status.Flag("running") ? "Syncing with iCloud…" : pendingCount > 0 ? $"{lastSync} · {pendingCount} pending" : lastSync;
         }
         catch { }
     }
@@ -475,8 +487,7 @@ public sealed partial class MainWindow : Window
         if (tag == "sync") { if (!_demo) await _sync.CallAsync("sync", new { }); ShowInfo("Syncing", "Checking iCloud for changes…", InfoBarSeverity.Informational); return; }
         if (tag == "conflicts") { await ResolveConflictsAsync(); return; }
         var split = tag.Split(':', 2); if (split.Length != 2) return;
-        _view = new(args.SelectedItemContainer.Content?.ToString() ?? "Reminders", "", split[0] switch { "list" => NavKind.List, "tag" => NavKind.Tag, _ => NavKind.Smart }, split[1]);
-        ViewTitle.Text = _view.Label; ViewSubtitle.Text = _view.Kind == NavKind.Tag ? "Filtered by tag" : ""; ShowDetail(null); await LoadRemindersAsync();
+        await SelectViewAsync(new(args.SelectedItemContainer.Content?.ToString() ?? "Reminders", "", split[0] switch { "list" => NavKind.List, "tag" => NavKind.Tag, _ => NavKind.Smart }, split[1]));
     }
 
     private void Navigation_PaneOpening(NavigationView sender, object args)
@@ -539,7 +550,7 @@ public sealed partial class MainWindow : Window
     private void Navigation_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
         var pointerX = e.GetCurrentPoint(Navigation).Position.X;
-        if (!_panePinnedOpen && !_hoverExpanded && !Navigation.IsPaneOpen && pointerX <= Navigation.CompactPaneLength + 8)
+        if (!IsAppleStyle && !_panePinnedOpen && !_hoverExpanded && !Navigation.IsPaneOpen && pointerX <= Navigation.CompactPaneLength + 8)
         {
             _paneHoverCloseTimer.Stop();
             if (!_paneHoverOpenTimer.IsEnabled) _paneHoverOpenTimer.Start();
@@ -615,6 +626,8 @@ public sealed partial class MainWindow : Window
             DetailTitle.Text = reminder.Title; DetailNotes.Text = reminder.Description; DetailList.SelectedValue = reminder.ListId; DetailPriority.SelectedItem = DetailPriority.Items.OfType<ComboBoxItem>().FirstOrDefault(item => item.Tag?.ToString() == reminder.Priority.ToString());
             if (DateTimeOffset.TryParse(reminder.DueDate, out var due)) { DetailDate.Date = due; DetailTime.Time = due.LocalDateTime.TimeOfDay; } else DetailDate.Date = null;
             DetailAllDay.IsOn = reminder.AllDay; DetailTime.IsEnabled = !reminder.AllDay; DetailFlagged.IsOn = reminder.Flagged;
+            DetailTags.Text = reminder.AppleTags;
+            AppleDetailStatus.Text = reminder.Dirty != 0 ? "Pending sync to iCloud." : _demo ? "Sample reminder · stored in memory." : "Changes sync automatically to iCloud.";
         }
         SaveButton.IsEnabled = false; _loadingDetail = false;
         UpdatePaneLayout();
@@ -661,7 +674,7 @@ public sealed partial class MainWindow : Window
 
     private async void Add_Click(object sender, RoutedEventArgs e) => await ShowNewReminderAsync();
     private async void NewAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; await ShowNewReminderAsync(); }
-    private void SearchAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; SearchBox.Focus(FocusState.Programmatic); }
+    private void SearchAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; RevealSearch(); }
     private async void SettingsAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) { args.Handled = true; await ShowSettingsAsync(); }
     private async Task ResolveConflictsAsync()
     {

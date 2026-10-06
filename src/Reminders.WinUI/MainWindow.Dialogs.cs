@@ -81,6 +81,7 @@ public sealed partial class MainWindow
         }
         _restoringNavigation = false;
         RestoreNavigationSelection();
+        RebuildAppleNavigation();
     }
 
     private void SaveUiPreferences()
@@ -199,6 +200,7 @@ public sealed partial class MainWindow
         {
             var themeValue = _settings.Text("theme", "system");
             var theme = new ComboBox { Header = "App theme", ItemsSource = new[] { "Match Windows", "Light", "Dark" }, SelectedIndex = themeValue switch { "light" => 1, "dark" => 2, _ => 0 }, HorizontalAlignment = HorizontalAlignment.Stretch };
+            var interfaceStyle = new ComboBox { Header = "Interface style", ItemsSource = new[] { "Windows (original)", "Apple-style" }, SelectedIndex = IsAppleStyle ? 1 : 0, HorizontalAlignment = HorizontalAlignment.Stretch };
             var paneSizing = new ComboBox { Header = "Reminder detail sizing", ItemsSource = new[] { "Automatic", "Custom" }, SelectedIndex = _uiPreferences.DetailPaneFraction is null ? 0 : 1, HorizontalAlignment = HorizontalAlignment.Stretch };
             var detailWidth = new Slider { Header = "Detail pane share (%)", Minimum = 0, Maximum = 100, StepFrequency = 1, Value = Math.Clamp(_uiPreferences.DetailPaneFraction ?? 0.5, 0, 1) * 100, IsEnabled = paneSizing.SelectedIndex == 1 };
             paneSizing.SelectionChanged += (_, _) => detailWidth.IsEnabled = paneSizing.SelectedIndex == 1;
@@ -211,7 +213,7 @@ public sealed partial class MainWindow
             if (defaultList.SelectedIndex < 0) defaultList.SelectedIndex = 0;
             var panel = new StackPanel { Spacing = 14, MinWidth = 360 };
             void Heading(string text) => panel.Children.Add(new TextBlock { Text = text, FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 10, 0, 0) });
-            Heading("Appearance"); panel.Children.Add(theme); panel.Children.Add(animation); panel.Children.Add(paneSizing); panel.Children.Add(detailWidth);
+            Heading("Appearance"); panel.Children.Add(interfaceStyle); panel.Children.Add(theme); panel.Children.Add(animation); panel.Children.Add(paneSizing); panel.Children.Add(detailWidth);
             panel.Children.Add(new TextBlock { Text = "Hover between the panes to reveal the divider. Drag it all the way to either edge to close a pane, and drag from that edge to reopen it. Double-click to restore automatic sizing. Automatic sizing shows one pane at a time in smaller windows.", TextWrapping = TextWrapping.Wrap });
             Heading("Reminders"); panel.Children.Add(defaultList); panel.Children.Add(notifications);
             Heading("iCloud sync"); panel.Children.Add(sync);
@@ -273,8 +275,9 @@ public sealed partial class MainWindow
             var values = new { theme = themeValue, sync_minutes = (int)Math.Clamp(sync.Value, 5, 60), notifications_enabled = notifications.IsOn, default_list_id = defaultList.SelectedValue as string };
             _settings = _demo ? JsonSerializer.SerializeToElement(values) : await _sync.CallAsync("set_settings", values);
             _uiPreferences.CompletionAnimation = animation.IsOn;
+            _uiPreferences.InterfaceStyle = interfaceStyle.SelectedIndex == 1 ? "apple" : "windows";
             _uiPreferences.DetailPaneFraction = paneSizing.SelectedIndex == 0 ? null : detailWidth.Value / 100;
-            SaveUiPreferences(); UpdatePaneLayout(); ApplyTheme(themeValue);
+            SaveUiPreferences(); ApplyTheme(themeValue); ApplyInterfaceStyle(); UpdatePaneLayout();
         }
         catch (Exception error) { ShowInfo("Couldn't save settings", error.Message, InfoBarSeverity.Error); }
         finally { _dialogOpen = false; }
@@ -313,5 +316,6 @@ public sealed partial class MainWindow
         rows = _sort switch { "title" => rows.OrderBy(row => row.Title), "priority" => rows.OrderBy(row => row.Priority == 0 ? 10 : row.Priority), _ => rows.OrderBy(row => row.DueDate is null).ThenBy(row => row.DueDate) };
         SetReminderRows(rows);
         SetBadge("smart:today", _demoRows.Count(row => !row.Completed && !row.Deleted && DateTimeOffset.TryParse(row.DueDate, out var due) && due.LocalDateTime.Date <= DateTime.Today));
+        UpdateDemoAppleCounts();
     }
 }
