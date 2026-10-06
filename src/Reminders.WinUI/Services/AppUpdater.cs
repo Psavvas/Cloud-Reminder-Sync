@@ -11,7 +11,7 @@ internal sealed record AppUpdate(Version Version, Uri DownloadUri, string Sha256
 
 internal sealed class AppUpdater
 {
-    internal const string Repository = "Psavvas/Cloud-Reminder-Sync";
+    internal const string Repository = "Psavvas/Reminders-for-Windows";
     private const long MaximumInstallerSize = 1024L * 1024 * 1024;
     private static readonly HttpClient Client = CreateClient();
     private readonly HttpClient _client;

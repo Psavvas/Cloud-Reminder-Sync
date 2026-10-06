@@ -26,6 +26,12 @@ void Reject(JsonElement release, string name)
     throw new Exception("FAILED: " + name);
 }
 Assert(AppUpdater.ParseRelease(Release(), current, Architecture.X64)?.Version == new Version(0, 4, 0), "newer stable release");
+var renamedRepositoryRelease = JsonSerializer.SerializeToElement(new
+{
+    tag_name = "v0.5.0", draft = false, prerelease = false,
+    assets = new[] { new { name = "Reminders-for-Windows-x64-Setup.exe", browser_download_url = "https://github.com/Psavvas/Reminders-for-Windows/releases/download/v0.5.0/Reminders-for-Windows-x64-Setup.exe", digest = "sha256:" + digest, size = payload.Length } }
+});
+Assert(AppUpdater.ParseRelease(renamedRepositoryRelease, new Version(0, 4, 3), Architecture.X64)?.Version == new Version(0, 5, 0), "accept actual release URLs after repository rename");
 Assert(AppUpdater.ParseRelease(Release(arch: "arm64"), current, Architecture.Arm64) is not null, "ARM64 asset selection");
 Assert(AppUpdater.ParseRelease(Release(tag: "v0.3.0"), current, Architecture.X64) is null, "three and four part versions compare equally");
 Assert(AppUpdater.ParseRelease(Release(tag: "v0.2.0"), current, Architecture.X64) is null, "no downgrades");

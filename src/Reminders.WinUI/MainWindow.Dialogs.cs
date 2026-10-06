@@ -234,7 +234,7 @@ public sealed partial class MainWindow
             panel.Children.Add(new HyperlinkButton
             {
                 Content = "View source on GitHub",
-                NavigateUri = new Uri("https://github.com/Psavvas/Cloud-Reminder-Sync"),
+                NavigateUri = new Uri("https://github.com/Psavvas/Reminders-for-Windows"),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 Padding = new Thickness(0)
             });

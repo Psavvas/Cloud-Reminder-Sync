@@ -19,13 +19,13 @@
     <NuGetLockFilePath>packages.$(RuntimeIdentifier).lock.json</NuGetLockFilePath>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.4.3</Version>
+    <Version>0.5.0</Version>
     <Product>Reminders for Windows</Product>
     <Authors>Paul Savvas</Authors>
     <Company>paulsavvas.com</Company>
     <Description>An independent native Windows client compatible with Apple iCloud Reminders.</Description>
     <PackageProjectUrl>https://paulsavvas.com</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Psavvas/Cloud-Reminder-Sync</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Psavvas/Reminders-for-Windows</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Reminders.Core\Reminders.Core.csproj" />
