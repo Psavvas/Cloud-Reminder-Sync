@@ -39,6 +39,13 @@ from the manifest and keep submission files separate from sideloading outputs.
 Explicit identity parameters remain available for another reservation. Ordinary
 non-Store command-line builds retain the legacy development identity by default.
 
+GitHub Actions builds the Store submission packages for both architectures using
+`-Store`. After merging, wait for the successful workflow on the merged commit and
+download its x64 and ARM64 artifacts. Extract the artifact ZIPs and upload the two
+`.msix` files from `dist-store` unchanged. No certificate, manual signing, or
+repacking is needed. Release-tag builds attach the same Store packages to the
+draft release. Use the latest build rather than an older development-identity MSIX.
+
 ## Product display name
 
 The application and package display name is **Reminders for Windows**. The

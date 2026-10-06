@@ -126,14 +126,14 @@ jobs:
           path: .nuget/packages
           key: ${{ steps.nuget.outputs.cache-primary-key }}
 
-      - name: Build unsigned MSIX
-        run: .\scripts\build-msix.ps1 -Architecture ${{ matrix.architecture }} -SkipBuild
+      - name: Build Microsoft Store submission MSIX
+        run: .\scripts\build-msix.ps1 -Architecture ${{ matrix.architecture }} -Store -SkipBuild
 
       # The .exe installer is the artifact users can actually install. An
       # unsigned MSIX is refused outright by Windows -- the Install button is
       # disabled -- whereas an unsigned .exe only draws a SmartScreen warning
-      # the user can dismiss. The MSIX is kept for a future signed or Store
-      # release.
+      # the user can dismiss. The MSIX uses the assigned Store identity and
+      # is submitted to Partner Center for Microsoft signing.
       - name: Install Inno Setup
         run: |
           if (-not (Get-Command ISCC.exe -ErrorAction SilentlyContinue) -and
@@ -155,7 +155,7 @@ jobs:
           $expected = @(
             "${{ matrix.portable_dir }}/Reminders.exe",
             "${{ matrix.portable_dir }}/Reminders.Core.dll",
-            "dist-msix/Reminders-for-Windows-$arch.msix",
+            "dist-store/Reminders-for-Windows-$arch.msix",
             "dist-installer/Reminders-for-Windows-$lower-Setup.exe"
           )
           foreach ($path in $expected) {
@@ -173,6 +173,6 @@ jobs:
           path: |
             dist-installer/Reminders-for-Windows-${{ matrix.artifact }}-Setup.exe
             Reminders-for-Windows-${{ matrix.artifact }}.zip
-            dist-msix/Reminders-for-Windows-${{ matrix.architecture }}.msix
+            dist-store/Reminders-for-Windows-${{ matrix.architecture }}.msix
           if-no-files-found: error
           compression-level: 0

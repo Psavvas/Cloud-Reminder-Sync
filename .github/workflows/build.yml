@@ -116,5 +116,6 @@ jobs:
             application as a portable folder -- unzip it and run `Reminders.exe`.
             Keep the publish folder together, including `Reminders.Core.dll`.
 
-            The `.msix` is for a future signed or Microsoft Store release.
-            Windows will not install it while it is unsigned.
+            The `.msix` files use the assigned Microsoft Store identity and
+            are ready to upload to Partner Center for certification and signing.
+            Windows will not install them directly while they are unsigned.
