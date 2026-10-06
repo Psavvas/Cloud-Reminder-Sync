@@ -15,6 +15,10 @@ are no longer required.
 > approved by Apple Inc. It uses private, undocumented iCloud interfaces that may
 > change or stop working without notice. Read [LEGAL.md](LEGAL.md) before use.
 
+Read the [Privacy Policy](PRIVACY.md) for account data, iCloud syncing, local
+storage, notifications, update checks, and removal instructions. The same policy
+is available offline from the sign-in screen and **Settings → Privacy policy**.
+
 ## Develop in Visual Studio
 
 Open **Reminders.Windows.sln** in Visual Studio 2022 or newer with .NET desktop

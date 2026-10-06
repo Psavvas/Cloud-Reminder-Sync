@@ -33,6 +33,7 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="..\..\PRIVACY.md" LogicalName="Reminders.Windows.Privacy.md" />
     <Content Include="Assets\icon-v2.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\icon-v2.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

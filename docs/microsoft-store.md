@@ -65,6 +65,33 @@ use **Publish → Create App Packages → Microsoft Store**. The wizard can crea
 
 ## Submit and publish
 
+### Privacy policy
+
+Answer **Yes** to whether the product accesses, collects, or transmits personal
+information: it accesses Apple Account information and reminder contents, caches
+them locally, and syncs with Apple. Local storage still counts as accessing
+personal information.
+
+The policy is maintained in [PRIVACY.md](../PRIVACY.md) and embedded in the app,
+accessible before sign-in and through **Settings → Privacy policy**, even offline.
+Settings provides a Back button to return without losing unsaved preferences.
+Keep the policy current with any changes to data handling.
+
+After this change is merged into `main`, enter this public URL in Partner Center:
+
+https://github.com/Psavvas/Reminders-for-Windows/blob/main/PRIVACY.md
+
+Until the PR is merged, the published branch copy is available at:
+
+https://github.com/Psavvas/Reminders-for-Windows/blob/codex/reminders-for-windows-cleanup/PRIVACY.md
+
+Verify the chosen URL opens while signed out before submitting. The app does not
+create a separate developer-hosted account or upload reminder databases to a
+developer server; that does not remove the need to disclose its access to personal
+information. See Microsoft's [privacy policy requirements](https://learn.microsoft.com/en-us/windows/apps/publish/store-policies#105-personal-information).
+
+### Submission details
+
 Complete the Store listing, privacy policy, age rating, and certification notes.
 Explain the `runFullTrust` capability: the desktop WinUI app runs its C# iCloud sync
 engine, SQLite cache, Windows Credential Manager integration, and notifications.

@@ -238,6 +238,32 @@ public sealed partial class MainWindow
                 HorizontalAlignment = HorizontalAlignment.Left,
                 Padding = new Thickness(0)
             });
+            var privacy = new Button { Content = "Privacy policy" };
+            var settingsContent = dialog.Content;
+            var privacyContent = CreatePrivacyPolicyContent();
+            var showingPrivacy = false;
+            privacy.Click += (_, _) =>
+            {
+                dialog.Content = privacyContent;
+                dialog.Title = "Privacy policy";
+                dialog.PrimaryButtonText = "";
+                dialog.CloseButtonText = "Back";
+                dialog.DefaultButton = ContentDialogButton.Close;
+                showingPrivacy = true;
+            };
+            dialog.CloseButtonClick += (_, args) =>
+            {
+                if (!showingPrivacy) return;
+                // Return to the existing form so unsaved settings survive.
+                args.Cancel = true;
+                dialog.Content = settingsContent;
+                dialog.Title = "Settings";
+                dialog.PrimaryButtonText = "Save";
+                dialog.CloseButtonText = "Cancel";
+                dialog.DefaultButton = ContentDialogButton.Primary;
+                showingPrivacy = false;
+            };
+            panel.Children.Add(privacy);
             sync.ValueChanged += (_, _) => dialog.IsPrimaryButtonEnabled = double.IsFinite(sync.Value) && sync.Value >= 5 && sync.Value <= 60;
             var settingsResult = await dialog.ShowAsync();
             if (requestedUpdateCheck) { await CheckForUpdatesAsync(true); return; }
