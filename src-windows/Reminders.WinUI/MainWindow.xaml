@@ -63,18 +63,28 @@
      </Grid>
      <primitives:Thumb x:Name="PaneDivider" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
        AutomationProperties.Name="Resize reminder details" IsTabStop="True" UseSystemFocusVisuals="True"
-       ToolTipService.ToolTip="Drag to resize. Double-click for automatic sizing. Arrow keys resize; Home resets."
+       ToolTipService.ToolTip="Drag to resize or close either pane. Drag from the edge to reopen. Double-click or press Home for automatic sizing. Arrow keys resize."
        DragStarted="PaneDivider_DragStarted" DragDelta="PaneDivider_DragDelta" DragCompleted="PaneDivider_DragCompleted"
        KeyDown="PaneDivider_KeyDown" DoubleTapped="PaneDivider_DoubleTapped">
       <primitives:Thumb.ContextFlyout><MenuFlyout><MenuFlyoutItem Text="Size panes automatically" Click="AutomaticPaneSizing_Click"/></MenuFlyout></primitives:Thumb.ContextFlyout>
       <primitives:Thumb.Template><ControlTemplate TargetType="primitives:Thumb"><Grid Background="Transparent">
-       <VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="CommonStates">
-        <VisualState x:Name="Normal"/>
-        <VisualState x:Name="PointerOver"><VisualState.Setters><Setter Target="Grip.Background" Value="{ThemeResource AccentFillColorDefaultBrush}"/></VisualState.Setters></VisualState>
-        <VisualState x:Name="Pressed"><VisualState.Setters><Setter Target="Grip.Background" Value="{ThemeResource AccentFillColorDefaultBrush}"/></VisualState.Setters></VisualState>
-       </VisualStateGroup></VisualStateManager.VisualStateGroups>
-       <Border Width="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
-       <Border x:Name="Grip" Width="4" Height="40" CornerRadius="2" Background="{ThemeResource TextFillColorSecondaryBrush}"/>
+       <VisualStateManager.VisualStateGroups>
+        <VisualStateGroup x:Name="CommonStates">
+         <VisualState x:Name="Normal"/>
+         <VisualState x:Name="PointerOver"><VisualState.Setters><Setter Target="DividerVisual.Opacity" Value="1"/></VisualState.Setters></VisualState>
+         <VisualState x:Name="Pressed"><VisualState.Setters><Setter Target="DividerVisual.Opacity" Value="1"/></VisualState.Setters></VisualState>
+        </VisualStateGroup>
+        <VisualStateGroup x:Name="FocusStates">
+         <VisualState x:Name="Unfocused"/>
+         <VisualState x:Name="PointerFocused"/>
+         <VisualState x:Name="Focused"><VisualState.Setters><Setter Target="KeyboardFocusLine.Opacity" Value="1"/></VisualState.Setters></VisualState>
+        </VisualStateGroup>
+       </VisualStateManager.VisualStateGroups>
+       <Grid x:Name="DividerVisual" Opacity="0">
+        <Border Width="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+        <Border Width="4" Height="40" CornerRadius="2" Background="{ThemeResource AccentFillColorDefaultBrush}"/>
+       </Grid>
+       <Border x:Name="KeyboardFocusLine" Width="2" Background="{ThemeResource AccentFillColorDefaultBrush}" Opacity="0"/>
       </Grid></ControlTemplate></primitives:Thumb.Template>
      </primitives:Thumb>
      <Grid x:Name="DetailsHost" Grid.Column="2">

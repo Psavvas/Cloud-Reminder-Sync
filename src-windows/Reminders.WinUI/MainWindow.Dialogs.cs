@@ -212,7 +212,7 @@ public sealed partial class MainWindow
             var panel = new StackPanel { Spacing = 14, MinWidth = 360 };
             void Heading(string text) => panel.Children.Add(new TextBlock { Text = text, FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 10, 0, 0) });
             Heading("Appearance"); panel.Children.Add(theme); panel.Children.Add(animation); panel.Children.Add(paneSizing); panel.Children.Add(detailWidth);
-            panel.Children.Add(new TextBlock { Text = "Drag the divider to resize the panes. Double-click it to restore automatic sizing. Smaller windows show one pane at a time.", TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new TextBlock { Text = "Hover between the panes to reveal the divider. Drag it all the way to either edge to close a pane, and drag from that edge to reopen it. Double-click to restore automatic sizing. Automatic sizing shows one pane at a time in smaller windows.", TextWrapping = TextWrapping.Wrap });
             Heading("Reminders"); panel.Children.Add(defaultList); panel.Children.Add(notifications);
             Heading("iCloud sync"); panel.Children.Add(sync);
             panel.Children.Add(new TextBlock { Text = "Changes save locally and upload automatically. Use Sync now to check for changes immediately.", TextWrapping = TextWrapping.Wrap });

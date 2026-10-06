@@ -23,12 +23,14 @@ public sealed partial class MainWindow
             var sizes = PaneSizing.Calculate(ReminderLayout.ActualWidth, _uiPreferences.DetailPaneFraction);
             // Star columns can shrink during measure; fixed pixel columns keep the
             // parent's desired width too large to deliver a smaller SizeChanged.
-            ReminderColumn.Width = new GridLength(sizes.Compact ? 1 : sizes.List, GridUnitType.Star);
+            ReminderColumn.Width = sizes.List == 0 ? new GridLength(0) : new GridLength(sizes.Compact ? 1 : sizes.List, GridUnitType.Star);
             SplitterColumn.Width = new GridLength(sizes.Compact ? 0 : PaneSizing.DividerWidth);
-            DetailsColumn.Width = new GridLength(sizes.Compact ? 0 : sizes.Details, sizes.Compact ? GridUnitType.Pixel : GridUnitType.Star);
+            DetailsColumn.Width = new GridLength(sizes.Compact ? 0 : sizes.Details, sizes.Compact || sizes.Details == 0 ? GridUnitType.Pixel : GridUnitType.Star);
             Grid.SetColumn(DetailsHost, sizes.Compact ? 0 : 2);
-            ReminderHost.Visibility = sizes.Compact && _selected is not null ? Visibility.Collapsed : Visibility.Visible;
-            DetailsHost.Visibility = sizes.Compact && _selected is null ? Visibility.Collapsed : Visibility.Visible;
+            ReminderHost.MaxWidth = sizes.List;
+            DetailsHost.MaxWidth = sizes.Details;
+            ReminderHost.Visibility = (sizes.Compact ? _selected is null : sizes.List > 0) ? Visibility.Visible : Visibility.Collapsed;
+            DetailsHost.Visibility = (sizes.Compact ? _selected is not null : sizes.Details > 0) ? Visibility.Visible : Visibility.Collapsed;
             PaneDivider.Visibility = sizes.Compact ? Visibility.Collapsed : Visibility.Visible;
             BackToReminders.Visibility = sizes.Compact ? Visibility.Visible : Visibility.Collapsed;
             AddLabel.Visibility = sizes.List < 400 ? Visibility.Collapsed : Visibility.Visible;
@@ -50,10 +52,7 @@ public sealed partial class MainWindow
 
     private void ResizeDetails(double delta)
     {
-        var sizes = PaneSizing.Calculate(ReminderLayout.ActualWidth, _uiPreferences.DetailPaneFraction);
-        if (sizes.Compact) return;
-        var available = ReminderLayout.ActualWidth - PaneSizing.DividerWidth;
-        _uiPreferences.DetailPaneFraction = Math.Clamp(sizes.Details - delta, PaneSizing.MinimumWidth, available - PaneSizing.MinimumWidth) / available;
+        _uiPreferences.DetailPaneFraction = PaneSizing.Resize(ReminderLayout.ActualWidth, _uiPreferences.DetailPaneFraction, delta);
         UpdatePaneLayout();
     }
 
