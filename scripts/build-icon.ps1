@@ -25,7 +25,8 @@ function New-TaskCardIcon([int]$size) {
     $graphics.ScaleTransform(2, 2)
     # Draw the approved concept from geometry: flat colors and a transparent
     # surround keep every shell size free of generated-image edge artifacts.
-    $card = New-RoundedRectangle 24 40 464 432 32
+    # Equal insets and sides give the card a square footprint in the taskbar.
+    $card = New-RoundedRectangle 24 24 464 464 32
     $white = [Drawing.SolidBrush]::new([Drawing.Color]::White)
     $edge = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#D8DEE8'), 1)
     $graphics.FillPath($white, $card)
