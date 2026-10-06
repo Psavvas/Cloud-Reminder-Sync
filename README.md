@@ -1,7 +1,7 @@
 <div align="center">
-<img src="src-windows/Reminders.WinUI/Assets/icon-v2.png" width="112" alt="Reminders app icon">
+<img src="src/Reminders.WinUI/Assets/icon-v2.png" width="112" alt="Reminders app icon">
 
-# Cloud Reminder Sync
+# Reminders for Windows
 
 **A native WinUI 3 client for iCloud Reminders, written in C#/.NET.**
 </div>
@@ -15,6 +15,10 @@ are no longer required.
 > approved by Apple Inc. It uses private, undocumented iCloud interfaces that may
 > change or stop working without notice. Read [LEGAL.md](LEGAL.md) before use.
 
+Read the [Privacy Policy](PRIVACY.md) for account data, iCloud syncing, local
+storage, notifications, update checks, and removal instructions. The same policy
+is available offline from the sign-in screen and **Settings → Privacy policy**.
+
 ## Develop in Visual Studio
 
 Open **Reminders.Windows.sln** in Visual Studio 2022 or newer with .NET desktop
@@ -26,6 +30,15 @@ project before deploying; no signing key is committed to this repository.
 The solution contains the WinUI app, its C# backend library, the MSIX packaging
 project, and account-free backend/updater tests. Existing SQLite caches and Windows
 Credential Manager entries retain their formats and names.
+
+## Repository layout
+
+- `src/`: WinUI application, C# backend, and MSIX packaging project.
+- `tests/`: account-free backend, layout, and updater checks.
+- `scripts/`: development, build, packaging, and CI verification tools.
+- `docs/`: setup, architecture, protocol findings, and historical reviews.
+
+The retired Rust backend has been removed; its source remains in Git history.
 
 ## Quick start: demo mode
 
@@ -78,7 +91,7 @@ Install a build containing the updater once to enable it. Portable, development
 and MSIX builds offer a link to the release instead of running an installer.
 
 To ship an update, increase `<Version>` in the WinUI project and the MSIX version
-in `src-windows/Reminders.Package/Package.appxmanifest` together, commit the changes,
+in `src/Reminders.Package/Package.appxmanifest` together, commit the changes,
 and push a matching tag (for
 example `v0.4.0`). CI creates a draft with both installers. Review and publish
 that draft as a stable GitHub release; drafts and prereleases are ignored by
@@ -130,9 +143,9 @@ Windows Credential Manager, never SQLite. Review logs before sharing. See
 ## Tests
 
 ```powershell
-dotnet run --project .\src-windows\Reminders.Core.Tests\Reminders.Core.Tests.csproj -c Release
-dotnet run --project .\src-windows\AppUpdater.Tests\AppUpdater.Tests.csproj -c Release
-dotnet build .\src-windows\Reminders.WinUI\Reminders.WinUI.csproj -c Release -p:Platform=x64
+dotnet run --project .\tests\Reminders.Core.Tests\Reminders.Core.Tests.csproj -c Release
+dotnet run --project .\tests\AppUpdater.Tests\AppUpdater.Tests.csproj -c Release
+dotnet build .\src\Reminders.WinUI\Reminders.WinUI.csproj -c Release -p:Platform=x64
 ```
 
 Tests are account-free and cover independent SRP vectors, credential chunk recovery,
@@ -143,4 +156,6 @@ interoperability requires a disposable account; see [SECURITY_AUDIT.md](SECURITY
 
 Maintained by Paul Savvas. Package publisher: [paulsavvas.com](https://paulsavvas.com).
 Apple and iCloud are trademarks of Apple Inc., registered in the U.S. and other
-countries and regions. Product names describe compatibility only.
+countries and regions. Windows is a trademark of Microsoft Corporation.
+Product names describe compatibility only; this project is not affiliated with
+Apple or Microsoft.

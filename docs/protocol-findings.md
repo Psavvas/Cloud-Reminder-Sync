@@ -130,7 +130,7 @@ Session data stays in Windows Credential Manager; closing the window does not
 invoke sign-out. An explicit hsaChallengeRequired response is honored even when
 hsaTrustedBrowser is true.
 
-Mocked HTTP tests in src-windows/Reminders.Core.Tests/Program.cs cover the preparation,
+Mocked HTTP tests in tests/Reminders.Core.Tests/Program.cs cover the preparation,
 delivery, verification and trust sequence, rotated headers, token restoration,
 response limits and malformed/rejected verification responses. These checks
 validate client behavior; a real Apple account must still confirm successful

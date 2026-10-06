@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="..\..\src\Reminders.Core\Reminders.Core.csproj" /></ItemGroup>
+  <ItemGroup><Compile Include="..\..\src\Reminders.WinUI\Services\ReminderGrouping.cs" Link="ReminderGrouping.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="..\..\src\Reminders.WinUI\Services\PaneSizing.cs" Link="PaneSizing.cs" /></ItemGroup>
+</Project>

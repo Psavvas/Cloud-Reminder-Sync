@@ -88,9 +88,9 @@ native library, resources and `Reminders.Core.dll`. ARM64 output is under
 ## Verification and troubleshooting
 
 ```powershell
-dotnet run --project .\src-windows\Reminders.Core.Tests\Reminders.Core.Tests.csproj -c Release
-dotnet run --project .\src-windows\AppUpdater.Tests\AppUpdater.Tests.csproj -c Release
-dotnet build .\src-windows\Reminders.WinUI\Reminders.WinUI.csproj -c Release -p:Platform=x64
+dotnet run --project .\tests\Reminders.Core.Tests\Reminders.Core.Tests.csproj -c Release
+dotnet run --project .\tests\AppUpdater.Tests\AppUpdater.Tests.csproj -c Release
+dotnet build .\src\Reminders.WinUI\Reminders.WinUI.csproj -c Release -p:Platform=x64
 ```
 
 Choose **Text me a code** and enter the latest texted code for two-factor sign-in.

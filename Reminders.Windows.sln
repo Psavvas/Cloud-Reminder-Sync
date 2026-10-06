@@ -2,15 +2,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{C7167F0D-BC9F-4E6E-AF83-81BD789A8D2E}") = "Reminders.Package", "src-windows\Reminders.Package\Reminders.Package.wapproj", "{9502C684-992B-4A94-91A5-69133535C6C6}"
+Project("{C7167F0D-BC9F-4E6E-AF83-81BD789A8D2E}") = "Reminders.Package", "src\Reminders.Package\Reminders.Package.wapproj", "{9502C684-992B-4A94-91A5-69133535C6C6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reminders.WinUI", "src-windows\Reminders.WinUI\Reminders.WinUI.csproj", "{2FCA44F4-D0B9-4B1B-AF43-C4A0D94C6D73}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reminders.WinUI", "src\Reminders.WinUI\Reminders.WinUI.csproj", "{2FCA44F4-D0B9-4B1B-AF43-C4A0D94C6D73}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reminders.Core", "src-windows\Reminders.Core\Reminders.Core.csproj", "{65B67F9A-6251-4A62-870C-55CED24248B0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reminders.Core", "src\Reminders.Core\Reminders.Core.csproj", "{65B67F9A-6251-4A62-870C-55CED24248B0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reminders.Core.Tests", "src-windows\Reminders.Core.Tests\Reminders.Core.Tests.csproj", "{75311831-B68A-497B-BD02-D4E7B1083F25}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reminders.Core.Tests", "tests\Reminders.Core.Tests\Reminders.Core.Tests.csproj", "{75311831-B68A-497B-BD02-D4E7B1083F25}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AppUpdater.Tests", "src-windows\AppUpdater.Tests\AppUpdater.Tests.csproj", "{B4421550-67B5-453E-9B65-B5C53A4D5792}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AppUpdater.Tests", "tests\AppUpdater.Tests\AppUpdater.Tests.csproj", "{B4421550-67B5-453E-9B65-B5C53A4D5792}"
 EndProject
 Global
   GlobalSection(SolutionConfigurationPlatforms) = preSolution

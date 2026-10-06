@@ -32,9 +32,9 @@ $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
 $portableOutput = if ($Architecture -eq 'ARM64') { Join-Path $repository 'dist-windows-arm64' } else { Join-Path $repository 'dist-windows' }
 $installerOutput = Join-Path $repository 'dist-installer'
-$project = Join-Path $repository 'src-windows\Reminders.WinUI\Reminders.WinUI.csproj'
+$project = Join-Path $repository 'src\Reminders.WinUI\Reminders.WinUI.csproj'
 $script = Join-Path $PSScriptRoot 'installer\reminders.iss'
-$icon = Join-Path $repository 'src-windows\Reminders.WinUI\Assets\icon-v2.ico'
+$icon = Join-Path $repository 'src\Reminders.WinUI\Assets\icon-v2.ico'
 
 if (-not $SkipBuild) {
     & (Join-Path $PSScriptRoot 'build-windows.ps1') -Architecture $Architecture

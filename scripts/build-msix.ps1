@@ -14,7 +14,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
 if ($Store) {
-    [xml]$storeManifest = Get-Content -LiteralPath (Join-Path $repository 'src-windows/Reminders.Package/Package.appxmanifest') -Raw
+    [xml]$storeManifest = Get-Content -LiteralPath (Join-Path $repository 'src/Reminders.Package/Package.appxmanifest') -Raw
     if (-not $PSBoundParameters.ContainsKey('IdentityName')) { $IdentityName = $storeManifest.Package.Identity.Name }
     if (-not $PSBoundParameters.ContainsKey('Publisher')) { $Publisher = $storeManifest.Package.Identity.Publisher }
     if (-not $PSBoundParameters.ContainsKey('PublisherDisplayName')) { $PublisherDisplayName = $storeManifest.Package.Properties.PublisherDisplayName }
@@ -29,7 +29,7 @@ if ($Store) {
 }
 $portableOutput = if ($Architecture -eq 'ARM64') { Join-Path $repository 'dist-windows-arm64' } else { Join-Path $repository 'dist-windows' }
 $packageOutput = Join-Path $repository $(if ($Store) { 'dist-store' } else { 'dist-msix' })
-$project = Join-Path $repository 'src-windows\Reminders.WinUI\Reminders.WinUI.csproj'
+$project = Join-Path $repository 'src\Reminders.WinUI\Reminders.WinUI.csproj'
 $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
 $makeAppx = Get-ChildItem $sdkRoot -Recurse -Filter makeappx.exe -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -match '\\x64\\makeappx\.exe$' } |
@@ -59,7 +59,7 @@ try {
     New-Item -ItemType Directory -Path $staging, (Join-Path $staging 'Assets'), $packageOutput -Force | Out-Null
     Copy-Item -Path (Join-Path $portableOutput '*') -Destination $staging -Recurse -Force
     Get-ChildItem $staging -Filter '*.pdb' -File -ErrorAction SilentlyContinue | Remove-Item -Force
-    $packageProject = Join-Path $repository 'src-windows\Reminders.Package'
+    $packageProject = Join-Path $repository 'src\Reminders.Package'
     Copy-Item -Path (Join-Path $packageProject 'Assets\*.png') -Destination (Join-Path $staging 'Assets') -Force
     [xml]$manifestXml = Get-Content -LiteralPath (Join-Path $packageProject 'Package.appxmanifest') -Raw
     $manifestXml.Package.Identity.SetAttribute('Name', $IdentityName)

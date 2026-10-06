@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $repository 'src-windows\Reminders.WinUI\Reminders.WinUI.csproj'
+$project = Join-Path $repository 'src\Reminders.WinUI\Reminders.WinUI.csproj'
 $runtime = if ($Architecture -eq 'ARM64') { 'win-arm64' } else { 'win-x64' }
 $output = if ($Architecture -eq 'ARM64') { Join-Path $repository 'dist-windows-arm64' } else { Join-Path $repository 'dist-windows' }
 
