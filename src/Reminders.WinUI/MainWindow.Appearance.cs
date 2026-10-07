@@ -170,7 +170,7 @@ public sealed partial class MainWindow
             {
                 var button = new Button
                 {
-                    Content = "#" + tag, Tag = tag, Foreground = AppleBrush("AppleBlueBrush"), Background = AppleBrush("AppleHoverBrush"),
+                    Content = "#" + tag, Tag = tag, FontSize = 13, Foreground = AppleBrush("AppleBlueBrush"), Background = AppleBrush("AppleHoverBrush"),
                     BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(12), Padding = new Thickness(12, 5, 12, 5), Margin = new Thickness(0, 0, 6, 6),
                     HorizontalAlignment = HorizontalAlignment.Left
                 };
@@ -189,8 +189,8 @@ public sealed partial class MainWindow
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var icon = new Border { Width = 28, Height = 28, CornerRadius = new CornerRadius(14), Background = ColorBrush(entry.Color), Child = new FontIcon { Glyph = entry.Glyph, FontSize = 14, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) } };
-        var title = new TextBlock { Text = entry.Label, FontSize = 15, Foreground = AppleBrush("AppleTextBrush"), TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
-        var count = new TextBlock { Text = entry.Count.ToString(), FontSize = 14, Foreground = AppleBrush("AppleSecondaryBrush"), VerticalAlignment = VerticalAlignment.Center };
+        var title = new TextBlock { Text = entry.Label, FontSize = 14, Foreground = AppleBrush("AppleTextBrush"), TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        var count = new TextBlock { Text = entry.Count.ToString(), FontSize = 13, Foreground = AppleBrush("AppleSecondaryBrush"), VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(title, 1); Grid.SetColumn(count, 2);
         grid.Children.Add(icon); grid.Children.Add(title); grid.Children.Add(count);
         var row = new ListViewItem { Content = grid, Tag = entry, Style = (Style)Root.Resources["AppleRowStyle"] };

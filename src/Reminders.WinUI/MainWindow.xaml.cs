@@ -465,7 +465,6 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    private void Demo_Click(object sender, RoutedEventArgs e) => LoadDemo();
     private void LoadDemo()
     {
         _demo = true; AuthGate.Visibility = Visibility.Collapsed;
