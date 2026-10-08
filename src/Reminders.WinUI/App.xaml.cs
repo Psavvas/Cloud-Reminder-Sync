@@ -7,12 +7,27 @@ public partial class App : Application
     private Window? _window;
     public App()
     {
-        InitializeComponent();
         UnhandledException += (_, args) => Services.AppLog.Error("Unhandled UI exception", args.Exception);
+        Services.AppLog.Info("Starting Reminders " + typeof(App).Assembly.GetName().Version);
+        try { InitializeComponent(); }
+        catch (Exception error)
+        {
+            Services.AppLog.Error("Application resources could not be initialized", error);
+            throw;
+        }
     }
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _window = new MainWindow();
-        _window.Activate();
+        try
+        {
+            _window = new MainWindow();
+            _window.Activate();
+            Services.AppLog.Info("Main window activated");
+        }
+        catch (Exception error)
+        {
+            Services.AppLog.Error("Main window could not be launched", error);
+            throw;
+        }
     }
 }
