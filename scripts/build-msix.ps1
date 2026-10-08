@@ -35,6 +35,8 @@ $makeAppx = Get-ChildItem $sdkRoot -Recurse -Filter makeappx.exe -ErrorAction Si
     Where-Object { $_.FullName -match '\\x64\\makeappx\.exe$' } |
     Sort-Object { [version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1
 if (-not $makeAppx) { throw 'MakeAppx.exe was not found in the installed Windows SDK.' }
+$makePri = Join-Path $makeAppx.Directory.FullName 'makepri.exe'
+if (-not (Test-Path -LiteralPath $makePri)) { throw 'MakePri.exe was not found in the installed Windows SDK.' }
 
 if (-not $SkipBuild) {
     & (Join-Path $PSScriptRoot 'build-windows.ps1') -Architecture $Architecture
@@ -52,6 +54,10 @@ if ($CertificateThumbprint) {
 [xml]$projectXml = Get-Content -Raw $project
 $sourceVersion = [version]$projectXml.Project.PropertyGroup.Version
 $packageVersion = "$($sourceVersion.Major).$($sourceVersion.Minor).$($sourceVersion.Build).0"
+$executableVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $portableOutput 'Reminders.exe')).FileVersion
+if ([version]$executableVersion -ne [version]$packageVersion) {
+    throw "The published executable is $executableVersion, but the package is $packageVersion. Rebuild without -SkipBuild."
+}
 $processorArchitecture = if ($Architecture -eq 'ARM64') { 'arm64' } else { 'x64' }
 $staging = Join-Path ([IO.Path]::GetTempPath()) "reminders-msix-$([guid]::NewGuid().ToString('N'))"
 
@@ -70,6 +76,34 @@ try {
     $manifestXml.Package.Applications.Application.SetAttribute('Executable', 'Reminders.exe')
     $manifestXml.Package.Applications.Application.SetAttribute('EntryPoint', 'Windows.FullTrustApplication')
     $manifestXml.Save((Join-Path $staging 'AppxManifest.xml'))
+    # Package identity changes MRT lookup: the portable Reminders.pri is not the
+    # package's default resource index. Rebuild it as resources.pri with the
+    # final identity (renaming the file alone leaves the wrong primary map).
+    if (-not (Test-Path -LiteralPath (Join-Path $staging 'Reminders.pri'))) {
+        throw 'The portable build is missing Reminders.pri. Rebuild before packaging.'
+    }
+    $priOutput = @(& $makePri new /pr $staging /cf (Join-Path $PSScriptRoot 'msix-priconfig.xml') /in $IdentityName /of (Join-Path $staging 'resources.pri') /o 2>&1)
+    if ($LASTEXITCODE -ne 0) { $priOutput | Write-Host; throw 'MakePri failed to create the package resource index.' }
+
+    # Verify the actual generated map and startup resources before packing.
+    $priDump = Join-Path ([IO.Path]::GetTempPath()) "reminders-pri-$([guid]::NewGuid().ToString('N')).xml"
+    try {
+        $dumpOutput = @(& $makePri dump /if (Join-Path $staging 'resources.pri') /of $priDump /dt detailed /o 2>&1)
+        if ($LASTEXITCODE -ne 0) { $dumpOutput | Write-Host; throw 'MakePri failed to inspect the package resource index.' }
+        [xml]$resourceIndex = Get-Content -LiteralPath $priDump -Raw
+        $primaryMap = $resourceIndex.SelectSingleNode('//ResourceMap[@primary="true"]')
+        if (-not $primaryMap -or $primaryMap.GetAttribute('name') -cne $IdentityName) {
+            throw 'The package resource index does not match the final package identity.'
+        }
+        foreach ($resource in @('App.xbf', 'MainWindow.xbf')) {
+            if (-not $primaryMap.SelectSingleNode("ResourceMapSubtree[@name='Files']/NamedResource[@name='$resource']/Candidate")) {
+                throw "The package resource index is missing $resource."
+            }
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $priDump) { Remove-Item -LiteralPath $priDump -Force }
+    }
     $package = Join-Path $packageOutput "Reminders-for-Windows-$Architecture.msix"
     $packOutput = @(& $makeAppx.FullName pack /o /h SHA256 /d $staging /p $package 2>&1)
     if ($LASTEXITCODE -ne 0) { $packOutput | Write-Host; throw 'MakeAppx failed to create the MSIX package.' }
