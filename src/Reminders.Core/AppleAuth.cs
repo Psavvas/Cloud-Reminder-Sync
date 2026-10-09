@@ -160,7 +160,9 @@ internal sealed class AppleAuth : IDisposable
         (int Status, string Text, bool Token) result;
         if (phones.Count > 0)
         {
-            var phone = phones[0]; route = ("sms", phone.Number("id"), phone.Text("pushMode") is { Length: > 0 } mode ? mode : "sms");
+            // Verification must echo the mode we request, rather than the
+            // phone's preferred delivery mode from Apple's account metadata.
+            var phone = phones[0]; route = ("sms", phone.Number("id"), "sms");
             result = await Auth(HttpMethod.Put, "/verify/phone", new JsonObject { ["phoneNumber"] = PhonePayload(phone), ["mode"] = "sms" }, token, "application/json");
         }
         else
@@ -184,7 +186,9 @@ internal sealed class AppleAuth : IDisposable
             var body = new JsonObject { ["securityCode"] = new JsonObject { ["code"] = code } };
             if (isSms) { body["phoneNumber"] = PhonePayload(phones.FirstOrDefault(p => p.Number("id") == r.Item2) ?? new JsonObject { ["id"] = r.Item2 }); body["mode"] = r.Item3; }
             var response = await Auth(HttpMethod.Post, isSms ? "/verify/phone/securitycode" : "/verify/trusteddevice/securitycode", body, token, isSms ? "application/json, plain/text" : "application/json"); var value = J.Parse(response.Text);
-            if (CodeAccepted(response.Status, value, response.Token)) break;
+            var accepted = CodeAccepted(response.Status, value, response.Token);
+            Diagnostic?.Invoke($"icloud verification: method={r.Item1} HTTP {response.Status} code_accepted={accepted} token_issued={response.Token}");
+            if (accepted) break;
             NoteOptions(value);
             if (!isSms && response.Status == 409) throw new CoreException("2FA_REQUIRED", "Apple won't verify a device code from this app. Choose Text me a code instead.", Detail(value));
             if (i == routes.Length - 1)
@@ -196,7 +200,15 @@ internal sealed class AppleAuth : IDisposable
         }
         var trust = await Auth(HttpMethod.Get, "/2sv/trust", null, token);
         if (trust.Status is < 200 or >= 300) throw new CoreException("2FA_REQUIRED", "Apple accepted the code but did not establish session trust. Please sign in again.");
-        await AccountLogin(token);
+        try { await AccountLogin(token); }
+        catch (CoreException error) when (error.Code == "NETWORK")
+        {
+            // The digits and trust step succeeded. A setup-service failure is
+            // a separate stage, and resending codes will not resolve it.
+            var status = error.Detail.Split(':', 2)[0];
+            var suffix = status.StartsWith("HTTP ", StringComparison.Ordinal) ? $" ({status})" : "";
+            throw new CoreException(error.Code, $"Apple accepted the verification code, but iCloud account sign-in failed{suffix}. Try again, or sign in at iCloud.com to check your account.", error.Detail);
+        }
         if (!State.Flag("trusted_session") || RequiresTwoFactor) throw new CoreException("2FA_REQUIRED", "Apple has not finished verifying this session. Please try signing in again.");
         route = ("unknown", 0, "sms"); sent.Clear(); notice = null;
     }
