@@ -147,6 +147,19 @@ rejects the code. A previously saved token does not qualify. Successful trust
 and accountLogin confirming a trusted browser without an outstanding challenge
 are still required before the UI is authenticated.
 
-Verification diagnostics log only the optional valid boolean and token-presence
-boolean. They do not log the code or token. Existing field-name-only logs cannot
-establish whether an earlier 409 contained either acceptance signal.
+Verification diagnostics log the acceptance decision and token-presence boolean.
+They do not log the code or token. Existing field-name-only logs cannot establish
+whether an earlier 409 contained either acceptance signal.
+
+### SMS mode and failures after verification
+
+The verification payload must use the same `mode` as the delivery request. The
+connector explicitly requests `sms`, so it must verify with `sms` even if Apple's
+phone metadata has a different `pushMode`. Mocked checks cover this mismatch.
+
+After an accepted code and successful trust request, accountLogin can still fail.
+Network errors at this stage now identify that the code was accepted and include
+the HTTP status when available. Verification diagnostics record the acceptance
+decision and whether a token was issued, without recording either secret.
+The certification screenshot alone cannot establish the reviewer's failure:
+capture the tested package version and the app.log endpoint/status sequence.
